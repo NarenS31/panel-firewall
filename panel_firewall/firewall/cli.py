@@ -165,6 +165,11 @@ def cmd_proxy(a):
     return run_proxy(a)
 
 
+def cmd_doctor(a):
+    from panel_firewall.firewall.doctor import cmd_doctor as run
+    return run(a)
+
+
 def cmd_serve(a):
     from panel_firewall.firewall.gateway import run_serve
     return run_serve(a)
@@ -221,6 +226,9 @@ def main(argv=None) -> int:
     p.add_argument("--shadow", action="store_true", help="evaluate everything and log what WOULD be blocked/held, but let actions run")
     cloud_flags(p)
     p.add_argument("upstream", nargs=argparse.REMAINDER); p.set_defaults(fn=cmd_proxy)
+    p = sub.add_parser("doctor", help="check your setup (signing key, PIN, API key, cloud reachability) and print the fix for each problem")
+    p.add_argument("--policy"); p.add_argument("--key"); p.add_argument("--pin-file"); cloud_flags(p)
+    p.add_argument("upstream", nargs=argparse.REMAINDER, help="-- <upstream command> (optional: checks it is installed)"); p.set_defaults(fn=cmd_doctor)
     p = sub.add_parser("serve", help="serve the policy's native connectors (sqlite/stripe/shopify) as an MCP server")
     common(p); p.add_argument("--key"); p.add_argument("--session", default="default")
     p.add_argument("--shadow", action="store_true", help="shadow mode (see proxy --shadow)"); cloud_flags(p); p.set_defaults(fn=cmd_serve)

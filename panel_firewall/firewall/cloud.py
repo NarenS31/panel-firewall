@@ -130,6 +130,7 @@ class CloudClient:
     def policy(self) -> dict: return self._req("GET", "/v1/policy")
     def ping(self) -> dict: return self._req("GET", "/v1/ping")
     def events(self, events: list[dict]) -> dict: return self._req("POST", "/v1/events", json={"events": events})
+    def tools(self, tools: list[dict]) -> dict: return self._req("POST", "/v1/proxy/tools", json={"tools": tools})
     def request_approval(self, body: dict) -> dict: return self._req("POST", "/v1/approvals", json=body)
     def approval(self, aid: str, wait: int = 0) -> dict:
         return self._req("GET", f"/v1/approvals/{aid}", params={"wait": wait}, timeout=wait + 10 if wait else None)
@@ -255,6 +256,27 @@ def receipt_event(ledger_id: str, seq: int, receipt: dict, detail: dict, policy:
     return out
 
 
+_HINTS = ("readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint")
+
+
+def minimise_tools(tools: list) -> list[dict]:
+    """What the cloud may see of an upstream tools/list: the tool name, each parameter's NAME and JSON TYPE, and boolean annotation hints.
+    No descriptions (they can carry instructions or data), no defaults, no enums, no examples."""
+    out = []
+    for t in tools:
+        if not isinstance(t, dict) or not isinstance(t.get("name"), str):
+            continue
+        props = ((t.get("inputSchema") or {}).get("properties") or {}) if isinstance(t.get("inputSchema"), dict) else {}
+        item: dict = {"name": t["name"],
+                      "properties": {k: (v.get("type") if isinstance(v, dict) and isinstance(v.get("type"), str) else "any")[:20]
+                                     for k, v in list(props.items())[:60] if isinstance(k, str)}}
+        ann = {k: v for k, v in (t.get("annotations") or {}).items() if k in _HINTS and isinstance(v, bool)} if isinstance(t.get("annotations"), dict) else {}
+        if ann:
+            item["annotations"] = ann
+        out.append(item)
+    return out[:300]
+
+
 class CloudSync:
     """Background worker: policy refresh, event upload, approval registration and decision pick-up. Every method is safe to call
     repeatedly and never raises on network trouble (the proxy keeps enforcing locally)."""
@@ -267,6 +289,22 @@ class CloudSync:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self.online = True
+
+    # -- tools/list report (for the dashboard's "Suggested rules"); fire-and-forget, only re-sent when it changes
+    def report_tools(self, tools: list) -> None:
+        payload = minimise_tools(tools)
+        if not payload:
+            return
+        digest = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+        if digest == getattr(self, "_tools_digest", None):
+            return
+        def go():
+            try:
+                self.client.tools(payload)
+                self._tools_digest = digest
+            except CloudError as e:
+                log.warning("could not report the tool list to the cloud (%s); suggestions will be missing until the next tools/list", e)
+        threading.Thread(target=go, daemon=True).start()
 
     # -- policy
     def apply_policy(self, pol: Policy) -> None:

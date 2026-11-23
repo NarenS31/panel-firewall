@@ -187,6 +187,7 @@ class Gateway:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._stop = asyncio.Event()
         self.exit_code = 0
+        self.on_tools = None                  # set by the cloud sync: called with every upstream tools/list result (names/schemas only leave the machine)
 
     # ------------------------------------------------------------------ output to the client
     async def send_client(self, msg: dict):
@@ -220,6 +221,8 @@ class Gateway:
             conn = self.up_conn.get(up.name)
             if conn is not None:
                 conn.known.update(t["name"] for t in tools if isinstance(t, dict) and isinstance(t.get("name"), str))
+            if self.on_tools:
+                self.on_tools(tools)
 
     # ------------------------------------------------------------------ client -> gateway
     async def handle_client_line(self, line: bytes):
@@ -326,6 +329,8 @@ class Gateway:
                 cursor = res.get("nextCursor")
                 if not cursor:
                     break
+        if self.on_tools:
+            self.on_tools(tools)
         return tools
 
     # ------------------------------------------------------------------ tools/call
@@ -457,6 +462,7 @@ def _start_cloud(a, gw):
     client, state, pm = cs
     sync = CloudSync(client, state, pm, gw.fw, forced_shadow=bool(getattr(a, "shadow", False)))
     sync.apply_policy(pm.policy)
+    gw.on_tools = sync.report_tools
     print(f"panel: connected to Panel Cloud workspace {pm.workspace_id}; policy v{pm.version} ({gw.fw.mode}). Ledger: {a.ledger}\n"
           f"panel: approve held actions at the terminal with `usepanel approve <id> --ledger {a.ledger}` or in the Panel Cloud dashboard.", file=sys.stderr)
     sync.start()
