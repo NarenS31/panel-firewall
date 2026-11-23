@@ -8,6 +8,14 @@ import pytest
 from panel_firewall.firewall.types import FirewallError
 from panel_firewall.firewall.ui import make_server, start_background
 from tests.fw_helpers import act, make_fw
+from panel_firewall.firewall.pin import PinStore
+
+PIN = "correct horse"
+
+
+def pin_store(tmp_path):
+    st = PinStore(tmp_path / "pin.json"); st.set_pin(PIN, n=2 ** 10)
+    return st
 
 
 def req(srv, path, method="GET", token=True, host=None, body=None):
@@ -31,15 +39,15 @@ def test_refuses_non_local_bind():
             make_server(fw.ledger, 0, host=h)
 
 
-def test_approve_via_http_records_who_and_releases_action():
-    fw = make_fw(); srv = start_background(fw.ledger, 0, "ui-human")
+def test_approve_via_http_records_who_and_releases_action(tmp_path):
+    fw = make_fw(); srv = start_background(fw.ledger, 0, "ui-human", pin_store(tmp_path))
     try:
         o = fw.handle(act(amount=75))
         assert req(srv, "/api/pending")[1]["pending"][0]["approval_id"] == o.approval_id
-        code, body = req(srv, f"/api/approve/{o.approval_id}", "POST", body={})
+        code, body = req(srv, f"/api/approve/{o.approval_id}", "POST", body={"pin": PIN})
         assert code == 200 and body["who"] == "ui-human"
         assert fw.handle(act(amount=75)).status == "executed"
-        assert req(srv, f"/api/approve/{o.approval_id}", "POST", body={})[0] == 409     # already decided
+        assert req(srv, f"/api/approve/{o.approval_id}", "POST", body={"pin": PIN})[0] == 409     # already decided
         assert any(e["event"] == "approved" for e in req(srv, "/api/feed")[1]["events"])
         assert req(srv, "/api/receipts")[1]["receipts"]
     finally:

@@ -6,6 +6,8 @@ attacker-influenced text (tool arguments are written by the agent):
   * every /api request needs the per-run token (printed once to the human's terminal), so a web page open in the
     browser cannot drive it; the Host header must be localhost/127.0.0.1 (DNS-rebinding defence);
   * no CORS headers are ever sent.
+Approving also needs the approval PIN (`usepanel pin set`), typed into the form on this page and checked with a lockout;
+Deny does not. Without a PIN set, approving here is refused.
 Limit: anything running as the same OS user (including an agent with a shell) can read the token or run `usepanel approve`.
 Keep the agent in a separate OS user/sandbox if it has shell access.
 """
@@ -20,6 +22,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from panel_firewall.firewall.ledger import Ledger
+from panel_firewall.firewall.pin import ApprovalGate, PinError, PinStore
 from panel_firewall.firewall.types import FirewallError
 
 PAGE = """<!doctype html><html><head><meta charset="utf-8"><title>Panel approvals</title>
@@ -34,13 +37,16 @@ const T=new URLSearchParams(location.search).get('t')||'';let last=0;
 const H={'X-Panel-Token':T};
 const el=(t,txt,c)=>{const e=document.createElement(t);if(txt!==undefined)e.textContent=txt;if(c)e.className=c;return e};
 async function api(p,o){const r=await fetch(p,Object.assign({headers:H},o||{}));return r.json()}
-async function decide(id,what){await api('/api/'+what+'/'+id,{method:'POST',headers:Object.assign({'Content-Type':'application/json'},H),body:'{}'});load()}
-async function load(){const p=await api('/api/pending');const box=document.getElementById('pending');box.textContent='';
+async function decide(id,what,pin,msg){const r=await api('/api/'+what+'/'+id,{method:'POST',headers:Object.assign({'Content-Type':'application/json'},H),body:JSON.stringify({pin:pin||''})});
+ if(!r.ok&&msg)msg.textContent=r.message||r.error||'refused';load()}
+async function load(){if(document.activeElement&&document.activeElement.tagName==='INPUT')return;const p=await api('/api/pending');const box=document.getElementById('pending');box.textContent='';
  if(!p.pending||!p.pending.length)box.append(el('p','Nothing waiting.','dim'));
  for(const a of (p.pending||[])){const c=el('div',undefined,'card');c.append(el('b',a.tool+'  ['+a.approval_id+']'));
   c.append(el('pre','args: '+JSON.stringify(a.args,null,1)));c.append(el('pre','why held: '+(a.reasons||[]).join('; ')));
-  const ap=el('button','Approve');ap.onclick=()=>decide(a.approval_id,'approve');const dn=el('button','Deny');dn.onclick=()=>decide(a.approval_id,'deny');
-  c.append(ap,dn);box.append(c)}
+  const pin=el('input');pin.type='password';pin.placeholder='Approval PIN';pin.autocomplete='off';pin.setAttribute('aria-label','Approval PIN');
+  const msg=el('span',undefined,'dim');
+  const ap=el('button','Approve');ap.onclick=()=>decide(a.approval_id,'approve',pin.value,msg);const dn=el('button','Deny');dn.onclick=()=>decide(a.approval_id,'deny','',msg);
+  c.append(pin,ap,dn,msg);box.append(c)}
  const f=await api('/api/feed?since='+last);const ul=document.getElementById('feed');
  for(const e of (f.events||[])){last=Math.max(last,e.seq);ul.prepend(el('li',new Date(e.ts*1000).toISOString()+'  '+e.event+'  '+e.tool+'  '+e.idem_key.slice(0,14)+' '+(e.data.reasons?e.data.reasons.join('; '):'')))}}
 document.getElementById('export').onclick=async(ev)=>{ev.preventDefault();const r=await api('/api/receipts');
@@ -52,11 +58,12 @@ HOST_RE = re.compile(r"^(127\.0\.0\.1|localhost)(:\d+)?$")
 
 
 def make_server(ledger: Ledger, port: int = 8765, approver: str | None = None, host: str = "127.0.0.1",
-                token: str | None = None) -> ThreadingHTTPServer:
+                token: str | None = None, pin_store: PinStore | None = None) -> ThreadingHTTPServer:
     if host not in ("127.0.0.1", "localhost", "::1"):
         raise FirewallError("the Panel UI binds to localhost only")
     token = token or secrets.token_urlsafe(24)
     who_default = approver or getpass.getuser()
+    gate = ApprovalGate(ledger, pin_store)
 
     class H(BaseHTTPRequestHandler):
         def log_message(self, *a):  # quiet
@@ -112,7 +119,12 @@ def make_server(ledger: Ledger, port: int = 8765, approver: str | None = None, h
             except (ValueError, json.JSONDecodeError):
                 return self._send(400, {"error": "bad json"})
             who = body.get("who") if isinstance(body.get("who"), str) and body.get("who").strip() else who_default
-            ok, msg = ledger.approve(m.group(2), who, deny=(m.group(1) == "deny"))
+            pin = body.get("pin") if isinstance(body.get("pin"), str) else None
+            try:
+                ok, msg = gate.decide(m.group(2), who, pin, deny=(m.group(1) == "deny"))
+            except PinError as e:
+                code = 429 if e.locked_for else 403
+                return self._send(code, {"ok": False, "message": str(e), "retry_after": int(e.locked_for)})
             self._send(200 if ok else 409, {"ok": ok, "message": msg, "who": who})
 
     srv = ThreadingHTTPServer((host, port), H)
@@ -120,8 +132,8 @@ def make_server(ledger: Ledger, port: int = 8765, approver: str | None = None, h
     return srv
 
 
-def serve_forever(ledger: Ledger, port: int, approver: str | None = None) -> None:
-    srv = make_server(ledger, port, approver)
+def serve_forever(ledger: Ledger, port: int, approver: str | None = None, pin_store: PinStore | None = None) -> None:
+    srv = make_server(ledger, port, approver, pin_store=pin_store)
     print(f"Panel UI: http://127.0.0.1:{srv.server_address[1]}/?t={srv.panel_token}", flush=True)
     try:
         srv.serve_forever()
@@ -129,7 +141,7 @@ def serve_forever(ledger: Ledger, port: int, approver: str | None = None) -> Non
         pass
 
 
-def start_background(ledger: Ledger, port: int = 0, approver: str | None = None):
-    srv = make_server(ledger, port, approver)
+def start_background(ledger: Ledger, port: int = 0, approver: str | None = None, pin_store: PinStore | None = None):
+    srv = make_server(ledger, port, approver, pin_store=pin_store)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     return srv

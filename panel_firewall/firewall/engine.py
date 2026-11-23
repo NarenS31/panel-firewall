@@ -27,11 +27,12 @@ class Outcome:
     approval_id: str | None = None
     receipt: dict | None = None
     idempotency_key: str = ""
+    shadow: dict | None = None     # shadow mode only: {"would": "block"|"ask", "reasons": [...]}; never shown to the agent
 
     def to_dict(self) -> dict:
         return {"status": self.status, "verdict": self.verdict.to_dict(), "approval_id": self.approval_id,
                 "result": self.result.to_dict() if self.result else None, "idempotency_key": self.idempotency_key,
-                "receipt": self.receipt}
+                "receipt": self.receipt, "shadow": self.shadow}
 
 
 class Firewall:
@@ -69,11 +70,11 @@ class Firewall:
         v = action.args.get(rule.get("amount_field", "amount")) if isinstance(action.args, dict) else None
         return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
 
-    def _receipt(self, action: Action, key: str, verdict: Verdict, outcome: str, result_id, approved_by=None) -> dict | None:
+    def _receipt(self, action: Action, key: str, verdict: Verdict, outcome: str, result_id, approved_by=None, extra=()) -> dict | None:
         try:
             ts = self.clock()
             return self.ledger.append_receipt(key, action.conversation_id, action.tool, lambda prev: make_receipt(
-                self.signer, action, key, self.policy.sha256, self.policy.version, verdict, outcome, result_id, ts, approved_by, prev))
+                self.signer, action, key, self.policy.sha256, self.policy.version, verdict, outcome, result_id, ts, approved_by, prev, extra))
         except Exception as e:  # the action already happened or was refused; a missing receipt must be visible
             log.error("could not write receipt for %s: %s", key, type(e).__name__)
             return None
@@ -126,6 +127,8 @@ class Firewall:
             return self._blocked(action, key, [f"validation failed ({type(e).__name__}: {e}); blocked for safety"])
         led.append(key, action.conversation_id, action.tool, "requested",
                    {"action_sha": sha, "args": action.args, "verdict": v.to_dict(), "mode": self.mode})
+        if self.mode == "shadow":
+            return self._shadow(action, key, sha, conn, v)
         if v.decision == BLOCK:
             return self._blocked(action, key, v.reasons)
         if self.mode == "dry_run":
@@ -155,7 +158,36 @@ class Firewall:
             return self._execute_read(action, key, sha, conn, v)
         return self._execute(action, key, sha, conn, v, approver)
 
-    def _execute_read(self, action: Action, key: str, sha: str, conn: Connector, v: Verdict) -> Outcome:
+    def _shadow(self, action: Action, key: str, sha: str, conn: Connector, v: Verdict) -> Outcome:
+        """Shadow mode: record what enforcement WOULD have done, then let the action run. Receipts say mode=shadow and carry the
+        would-be verdict. Nothing here ever changes the mode: enforcing is a human editing the policy / dropping `--shadow`."""
+        risk = self._risk(action.tool, conn)
+        would, reasons = None, v.reasons
+        if v.decision == BLOCK:
+            would = "block"
+        elif v.decision == NEEDS_CONSENT:
+            would = "ask"
+        elif risk != "read" and self.policy.enforce_mode == "approval":
+            would, reasons = "ask", ["approval mode: every non-read action needs a human"]
+        rv = Verdict({"block": BLOCK, "ask": NEEDS_CONSENT}.get(would, ALLOW), reasons if would else v.reasons)
+        extra = ("mode=shadow",) + ((f"shadow_would={would}",) if would else ())
+        shadow = None
+        if would:
+            shadow = {"would": would, "reasons": reasons}
+            self.ledger.append(key, action.conversation_id, action.tool, "shadow",
+                               {"would": would, "reasons": reasons, "action_sha": sha, "risk": risk, "amount": self._amount(action),
+                                "mode": "shadow"})
+            log.warning("[shadow] would have %s %s: %s", "blocked" if would == "block" else "asked about", action.tool, "; ".join(reasons))
+        agent_v = Verdict(ALLOW, ["shadow mode: not enforced"])
+        if risk == "read":
+            o = self._execute_read(action, key, sha, conn, agent_v, rv, extra)
+        else:
+            o = self._execute(action, key, sha, conn, agent_v, None, rv, extra)
+        o.shadow = shadow
+        return o
+
+    def _execute_read(self, action: Action, key: str, sha: str, conn: Connector, v: Verdict, rv: Verdict | None = None,
+                      extra=()) -> Outcome:
         try:
             res = conn.execute(action, self.mode)
         except Exception as e:
@@ -165,7 +197,7 @@ class Firewall:
             return Outcome("failed", v, res, idempotency_key=key)
         self.ledger.append(key, action.conversation_id, action.tool, "read",
                            {"action_sha": sha, "result_id": res.result_id, "amount": None})
-        return Outcome("executed", v, res, receipt=self._receipt(action, key, v, "executed", res.result_id), idempotency_key=key)
+        return Outcome("executed", v, res, receipt=self._receipt(action, key, rv or v, "executed", res.result_id, extra=extra), idempotency_key=key)
 
     def _wait_for_approval(self, key: str, sha: str):
         deadline = time.monotonic() + self.consent_wait
@@ -175,7 +207,8 @@ class Firewall:
                 return ap
             self.sleep(0.2)
 
-    def _execute(self, action: Action, key: str, sha: str, conn: Connector, v: Verdict, approver) -> Outcome:
+    def _execute(self, action: Action, key: str, sha: str, conn: Connector, v: Verdict, approver, rv: Verdict | None = None,
+                 extra=()) -> Outcome:
         led = self.ledger
         status, prior = led.claim(key, action.conversation_id, action.tool)
         if status == "executed":
@@ -197,7 +230,7 @@ class Firewall:
         led.append(key, action.conversation_id, action.tool, "executed",
                    {"action_sha": sha, "result_id": res.result_id, "output": res.output, "amount": self._amount(action),
                     "approved_by": approver})
-        rec = self._receipt(action, key, v, "executed", res.result_id, approver)
+        rec = self._receipt(action, key, rv or v, "executed", res.result_id, approver, extra)
         return Outcome("executed", v, res, receipt=rec, idempotency_key=key)
 
 

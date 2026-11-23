@@ -29,11 +29,19 @@ Requires Python 3.11+. `tenthlook-core` is a dependency; until it is on PyPI, in
 ```bash
 pip install tenthlook-core panel-firewall        # or: pip install ./tenthlook-core ./panel-firewall
 usepanel keygen                            # Panel will not start without a signing key (stored outside any git repo, mode 0600)
+usepanel pin set                           # your approval PIN, typed at the terminal (see "Security model"); approvals are refused without one
 usepanel init --out policy.yaml -- npx -y @modelcontextprotocol/server-filesystem /srv/data     # drafts a starter policy: REVIEW IT
-usepanel proxy --policy policy.yaml -- npx -y @modelcontextprotocol/server-filesystem /srv/data # point your MCP client at this command
-usepanel pending ; usepanel approve <id>        # approve held actions (or: usepanel ui)
+
+# Start in shadow mode for 48 hours, review the report, then turn on enforcement.
+usepanel proxy --shadow --policy policy.yaml -- npx -y @modelcontextprotocol/server-filesystem /srv/data   # point your MCP client at this command
+usepanel report --since 48h                # plain summary: what WOULD have been blocked or held, by rule. Nothing was stopped.
+usepanel proxy --policy policy.yaml -- npx -y @modelcontextprotocol/server-filesystem /srv/data            # enforcement: you remove --shadow, Panel never does
+
+usepanel pending ; usepanel approve <id>        # approve held actions at the terminal with your PIN (or: usepanel ui)
 python -m panel_firewall.guard.proxy --upstream https://api.openai.com/v1 --policy my_policy.toml   # the support guard (see GUARD_README.md)
 ```
+**Shadow mode** evaluates every call against your policy, lets it run, and records "would have blocked" / "would have asked" in the ledger (receipts carry `mode=shadow`). It never switches itself to enforcing; you do that by dropping `--shadow` (or `mode: shadow` in the policy). Until then Panel protects nothing, and the proxy says so on start-up. `usepanel report --since 48h` groups the would-be decisions by tool and rule; `usepanel export-log` writes PII-scrubbed summaries (no raw arguments unless you pass `--include-raw-args`).
+
 Example policies and MCP client config: [examples/](examples/). Tests: `pip install -e ".[dev]" && pytest` (the real-MCP-server tests skip if the servers are not installed).
 
 ## Real results
@@ -64,8 +72,18 @@ Latency (Apple M4, loaded machine): policy `validate` median 0.01 ms (Shopify/St
 
 **5. Support guard v7, fresh9** (new held-out set, same model; [results/v7_report.md](results/v7_report.md)): 11 of 11 allowed requests carried out, 0 actions without consent, **one extra customer turn per carried-out request** (the yes). The live runs barely tested the yes/not-yes boundary (2 non-yes events on fresh9, none on fresh6/7/8); that boundary is tested by 108 phrase cases in `tests/test_v7.py`.
 
+## Security model
+**Approval PIN (anti self-approval).** Held actions are released only by a human. `usepanel approve <id>` and the local UI's Approve button both need an approval PIN that you set once with `usepanel pin set`.
+- The PIN is typed on the controlling terminal (`/dev/tty`) only: not an argument, not stdin, not an environment variable. Only a salted scrypt hash is stored (`~/.config/panel/approval_pin.json`, mode 600, outside the repo).
+- `usepanel approve` refuses unless stdin, stdout and `/dev/tty` are the same interactive terminal. A background process with piped stdio, or none, is refused. The UI asks for the PIN in a form; wrong attempts are rate-limited with a lockout (5 wrong in a row: 5 minutes, doubling up to 1 hour, kept on disk so a restart does not reset it).
+- A correct PIN mints a token bound to that exact pending action (approval id + action hash), valid 60 seconds, usable once. The ledger refuses an approval without a valid token and records the token's nonce, so a replay or a token for another action is refused. Denying never needs the PIN.
+
+*What this blocks:* an agent (or a prompt-injected tool) that runs `usepanel approve <id>`, or `curl`s your running UI's approve endpoint, without your PIN; guessing the PIN online.
+*What it does not block:* an agent that can read your keystrokes or screen (a keylogger, a screen-capture tool, a terminal it can inject into); a human who shares the PIN or approves everything without reading; anything with full access as your OS user, which can still rewrite the PIN file or the ledger directly, or start its own UI with its own PIN file. The ledger is a local file, so the PIN raises the bar, it is not a boundary against a determined same-user process.
+*Strongest setup:* approve from another device (a second machine or phone that holds the PIN), or run the agent as a separate OS user or container that cannot read the PIN file, the ledger or the signing key.
+
 ## Limits
-- **Consent is protected by the OS user, not cryptography.** An agent with a shell as the same OS user can run `usepanel approve <id>` itself or edit the ledger. Stronger: run the agent as a separate OS user or container that cannot read the ledger/keys, or approve from another device. Not built in.
+- **Consent is protected by a PIN and the OS user, not a hardware boundary.** The approval PIN stops an agent from running `usepanel approve` or calling the UI without it, but an agent with a shell as the same OS user can still edit the ledger or the PIN file. See "Security model". Stronger: run the agent as a separate OS user or container, or approve from another device.
 - **Only guards what is routed through it.** An agent with another path (shell, second MCP server, browser) bypasses Panel.
 - **The claim blocker is keyword-based and English-only**; it misses idioms ("dealt with", "pushed it through") and does not check counts. See [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
 - **Sandbox only.** Stripe refuses non-`sk_test_` keys; Shopify is for development stores; the Stripe connector has only run against a mock transport, the Shopify connector against fakes (plus one recorded dev-store refund for the older executor).

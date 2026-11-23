@@ -41,6 +41,7 @@ class Ledger:
     def __init__(self, path: str | Path = ":memory:", clock=time.time):
         self.path, self.clock = str(path), clock
         self._lock = threading.RLock()
+        self.guard = None      # set by pin.ApprovalGate: when present, approvals need a valid single-use PIN token
         self._db = sqlite3.connect(self.path, check_same_thread=False, isolation_level=None, timeout=15)
         if self.path != ":memory:":
             self._db.execute("PRAGMA journal_mode=WAL")
@@ -97,23 +98,55 @@ class Ledger:
                 self._db.execute("ROLLBACK")
                 raise
 
-    def approve(self, aid: str, who: str, deny: bool = False, reason: str = "") -> tuple[bool, str]:
-        """Out-of-band consent. Only a `pending` key can be approved/denied, once."""
+    def pending_action_sha(self, aid: str) -> str | None:
+        """action_sha of the still-pending action with this approval id, else None."""
+        with self._lock:
+            row = self._db.execute("""SELECT idem_key, data FROM events WHERE event='pending'
+                                      AND json_extract(data,'$.approval_id')=? ORDER BY seq DESC LIMIT 1""", (aid,)).fetchone()
+            if not row or self.consent_state(row[0]) != "pending":
+                return None
+            return json.loads(row[1])["action_sha"]
+
+    def approve(self, aid: str, who: str, deny: bool = False, reason: str = "", token: dict | None = None) -> tuple[bool, str]:
+        """Out-of-band consent. Only a `pending` key can be approved/denied, once. When `self.guard` is set (the CLI and the
+        UI always set it), an APPROVAL needs a token minted after a correct PIN: bound to this approval id + action sha, not
+        expired, and its nonce never used before (single use). Denials never need one."""
         who = (who or "").strip()
         if not who:
             return False, "who is required"
         with self._lock:
-            row = self._db.execute("""SELECT idem_key, conversation_id, tool, data FROM events WHERE event='pending'
-                                      AND json_extract(data,'$.approval_id')=? ORDER BY seq DESC LIMIT 1""", (aid,)).fetchone()
-            if not row:
-                return False, f"no pending action with id {aid}"
-            key, conv, tool, data = row
-            st = self.consent_state(key)
-            if st != "pending":
-                return False, f"action {aid} is already {st}"
-            self.append(key, conv, tool, "denied" if deny else "approved",
-                        {"approval_id": aid, "who": who, "reason": reason, "action_sha": json.loads(data)["action_sha"]})
-            return True, "denied" if deny else "approved"
+            self._db.execute("BEGIN IMMEDIATE")
+            try:
+                out = self._approve_locked(aid, who, deny, reason, token)
+                self._db.execute("COMMIT")
+                return out
+            except BaseException:
+                self._db.execute("ROLLBACK")
+                raise
+
+    def _approve_locked(self, aid, who, deny, reason, token) -> tuple[bool, str]:
+        row = self._db.execute("""SELECT idem_key, conversation_id, tool, data FROM events WHERE event='pending'
+                                  AND json_extract(data,'$.approval_id')=? ORDER BY seq DESC LIMIT 1""", (aid,)).fetchone()
+        if not row:
+            return False, f"no pending action with id {aid}"
+        key, conv, tool, data = row
+        st = self.consent_state(key)
+        if st != "pending":
+            return False, f"action {aid} is already {st}"
+        sha = json.loads(data)["action_sha"]
+        extra: dict = {}
+        if self.guard is not None and not deny:
+            why = self.guard.check_token(token, aid, sha, deny)
+            if why:
+                return False, f"refused: {why}"
+            used = self._db.execute("""SELECT 1 FROM events WHERE event IN ('approved','denied')
+                                       AND json_extract(data,'$.token_nonce')=? LIMIT 1""", (token["nonce"],)).fetchone()
+            if used:
+                return False, "refused: approval token was already used"
+            extra = {"token_nonce": token["nonce"], "pin_verified": True}
+        self.append(key, conv, tool, "denied" if deny else "approved",
+                    {"approval_id": aid, "who": who, "reason": reason, "action_sha": sha, **extra})
+        return True, "denied" if deny else "approved"
 
     # ------------------------------------------------------------------ reads
     def _rows(self, q: str, args=()) -> list[tuple]:

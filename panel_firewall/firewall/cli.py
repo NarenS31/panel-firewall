@@ -34,16 +34,77 @@ def cmd_pending(a):
 
 
 def _decide(a, deny):
+    from panel_firewall.firewall.pin import ApprovalGate, PinError, PinStore, read_secret_from_tty
     led = _ledger(a)
     who = a.who or getpass.getuser()
-    ok, msg = led.approve(a.id, who, deny=deny, reason=a.reason or "")
+    store = PinStore(a.pin_file)
+    pin = None
+    try:
+        gate = ApprovalGate(led, store)
+        if not deny:                       # refusing an action never needs the PIN; approving always does
+            if not store.is_set():
+                raise PinError("no approval PIN is set; run `usepanel pin set` first (approvals are refused without one)")
+            pin = read_secret_from_tty("Approval PIN (typed by you, never by the agent): ")
+        ok, msg = gate.decide(a.id, who, pin, deny=deny, reason=a.reason or "")
+    except PinError as e:
+        print(f"NOT DONE: {e}")
+        return 1
     print(("OK: " if ok else "NOT DONE: ") + msg + (f" by {who}" if ok else ""))
     return 0 if ok else 1
 
 
+def cmd_pin(a):
+    from panel_firewall.firewall.pin import PinError, PinStore, read_secret_from_tty
+    store = PinStore(a.pin_file)
+    if a.action == "status":
+        st = store.status()
+        print("no approval PIN set" if not st["set"] else
+              f"approval PIN set ({store.path}); " + (f"LOCKED for {int(st['locked_for'])}s" if st["locked_for"] > 0 else "not locked"))
+        return 0
+    try:
+        cur = read_secret_from_tty("Current PIN: ") if store.is_set() else None
+        new = read_secret_from_tty("New PIN or passphrase (6+ characters): ")
+        if read_secret_from_tty("Repeat it: ") != new:
+            print("NOT DONE: the two entries differ")
+            return 1
+        store.set_pin(new, cur)
+    except PinError as e:
+        print(f"NOT DONE: {e}")
+        return 1
+    print(f"approval PIN saved (salted scrypt hash, mode 600) at {store.path}")
+    return 0
+
+
+def _since(a):
+    from panel_firewall.firewall.summary import parse_since
+    try:
+        return parse_since(a.since) if a.since else 0.0
+    except ValueError as e:
+        raise FirewallError(str(e))
+
+
+def cmd_report(a):
+    from panel_firewall.firewall.policy import load_policy
+    from panel_firewall.firewall.summary import build_report, format_report
+    rep = build_report(_ledger(a), _since(a), load_policy(a.policy) if a.policy else None)
+    print(json.dumps(rep, indent=2) if a.json else format_report(rep, a.since or ""))
+    return 0
+
+
+def cmd_export_log(a):
+    from panel_firewall.firewall.policy import load_policy
+    from panel_firewall.firewall.summary import export_log
+    rows = export_log(_ledger(a), _since(a), a.include_raw_args, load_policy(a.policy) if a.policy else None)
+    Path(a.out).write_text("".join(json.dumps(r, sort_keys=True) + "\n" for r in rows))
+    print(f"wrote {len(rows)} events to {a.out} (PII-scrubbed summaries; " +
+          ("RAW ARGUMENTS INCLUDED, unscrubbed" if a.include_raw_args else "no raw arguments") + ")")
+    return 0
+
+
 def cmd_ui(a):
     from panel_firewall.firewall.ui import serve_forever
-    serve_forever(_ledger(a), a.port, a.who)
+    from panel_firewall.firewall.pin import PinStore
+    serve_forever(_ledger(a), a.port, a.who, PinStore(a.pin_file))
     return 0
 
 
@@ -57,6 +118,8 @@ def cmd_verify(a):
     why = {x.split("=", 1)[0]: x.split("=", 1)[1] for x in r["reasons"] if "=" in x}
     print(f"VALID signature and hashes. Panel decided '{r['verdict']}' (outcome: {why.get('outcome')}) for {why.get('tool')} "
           f"under policy v{why.get('policy_version')} ({r['policy_sha256'][:12]}...).")
+    if "mode=shadow" in r["reasons"]:
+        print("SHADOW MODE receipt: Panel recorded this verdict but did NOT enforce it; the action was allowed to run.")
     print("This proves what Panel checked and decided, and that the record was not altered. It does NOT prove the action was safe.")
     return 0
 
@@ -76,6 +139,9 @@ def cmd_verify_chain(a):
 
 def cmd_export(a):
     out = _ledger(a).receipts()
+    if a.scrub:
+        from panel_firewall.firewall.scrub import scrub
+        out = [dict(scrub(r), scrubbed=True) for r in out]       # signatures and the chain no longer verify on a scrubbed copy
     Path(a.out).write_text(json.dumps(out, indent=2))
     print(f"wrote {len(out)} receipts to {a.out}")
     return 0
@@ -115,12 +181,14 @@ def main(argv=None) -> int:
 
     p = sub.add_parser("keygen", help="create the Ed25519 receipt-signing key (outside the repo)")
     p.add_argument("--path"); p.add_argument("--force", action="store_true"); p.set_defaults(fn=cmd_keygen)
+    p = sub.add_parser("pin", help="set or check the approval PIN (typed at the terminal only)")
+    p.add_argument("action", choices=["set", "status"]); p.add_argument("--pin-file"); p.set_defaults(fn=cmd_pin)
     p = sub.add_parser("pending", help="list actions waiting for approval"); common(p); p.set_defaults(fn=cmd_pending)
     for name, deny in (("approve", False), ("deny", True)):
         p = sub.add_parser(name, help=f"{name} a held action (the only way consent is granted, besides `usepanel ui`)")
-        p.add_argument("id"); p.add_argument("--who"); p.add_argument("--reason"); common(p)
+        p.add_argument("id"); p.add_argument("--who"); p.add_argument("--reason"); p.add_argument("--pin-file"); common(p)
         p.set_defaults(fn=lambda a, d=deny: _decide(a, d))
-    p = sub.add_parser("ui", help="local approval UI on 127.0.0.1"); common(p); p.add_argument("--port", type=int, default=8765)
+    p = sub.add_parser("ui", help="local approval UI on 127.0.0.1"); common(p); p.add_argument("--port", type=int, default=8765); p.add_argument("--pin-file")
     p.add_argument("--who"); p.set_defaults(fn=cmd_ui)
     p = sub.add_parser("verify-receipt", help="check a receipt's signature and hashes")
     p.add_argument("file"); p.add_argument("--pubkey", required=True, help="public key (.pub) or private key file")
@@ -128,7 +196,14 @@ def main(argv=None) -> int:
     p = sub.add_parser("verify-chain", help="check the ledger's receipt chain (deleted/edited/reordered receipts)")
     common(p); p.add_argument("--pubkey"); p.add_argument("--expect-head"); p.add_argument("--expect-count", type=int)
     p.set_defaults(fn=cmd_verify_chain)
-    p = sub.add_parser("export-receipts"); common(p); p.add_argument("--out", required=True); p.set_defaults(fn=cmd_export)
+    p = sub.add_parser("export-receipts"); common(p); p.add_argument("--out", required=True)
+    p.add_argument("--scrub", action="store_true", help="mask emails/phones/cards/keys in the reasons (the copy will no longer verify)")
+    p.set_defaults(fn=cmd_export)
+    p = sub.add_parser("report", help="shadow mode: what would have been blocked or held, by rule")
+    common(p); p.add_argument("--since", default="48h"); p.add_argument("--json", action="store_true"); p.set_defaults(fn=cmd_report)
+    p = sub.add_parser("export-log", help="PII-scrubbed event summaries (JSONL). No raw arguments unless --include-raw-args")
+    common(p); p.add_argument("--out", required=True); p.add_argument("--since"); p.add_argument("--include-raw-args", action="store_true")
+    p.set_defaults(fn=cmd_export_log)
     p = sub.add_parser("check-reply", help="would this agent reply be blocked as an unbacked 'it's done' claim?")
     common(p); p.add_argument("--conversation", default="default"); p.add_argument("--mode", choices=["receipts", "regex"], default="receipts"); p.add_argument("text"); p.set_defaults(fn=cmd_check_reply)
     p = sub.add_parser("init", help="inspect an upstream MCP server and write a starter policy to review")
@@ -136,9 +211,11 @@ def main(argv=None) -> int:
     p.add_argument("upstream", nargs=argparse.REMAINDER, help="-- <upstream command>"); p.set_defaults(fn=cmd_init)
     p = sub.add_parser("proxy", help="wrap an existing MCP server: usepanel proxy --policy p.yaml -- <upstream cmd>")
     common(p); p.add_argument("--key"); p.add_argument("--session", default="default")
+    p.add_argument("--shadow", action="store_true", help="evaluate everything and log what WOULD be blocked/held, but let actions run")
     p.add_argument("upstream", nargs=argparse.REMAINDER); p.set_defaults(fn=cmd_proxy)
     p = sub.add_parser("serve", help="serve the policy's native connectors (sqlite/stripe/shopify) as an MCP server")
-    common(p); p.add_argument("--key"); p.add_argument("--session", default="default"); p.set_defaults(fn=cmd_serve)
+    common(p); p.add_argument("--key"); p.add_argument("--session", default="default")
+    p.add_argument("--shadow", action="store_true", help="shadow mode (see proxy --shadow)"); p.set_defaults(fn=cmd_serve)
     a = ap.parse_args(argv)
     try:
         return a.fn(a)

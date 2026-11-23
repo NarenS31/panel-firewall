@@ -100,7 +100,7 @@ def detail_record(action: Action, idem_key: str, policy_version: str, outcome: s
 
 def make_receipt(signer: Signer, action: Action, idem_key: str, policy_sha: str, policy_version: str, verdict: Verdict,
                  outcome: str, result_id: str | None, ts: float, approved_by: str | None = None,
-                 prev_receipt_sha256: str = core.GENESIS) -> tuple[dict, dict]:
+                 prev_receipt_sha256: str = core.GENESIS, extra_reasons: tuple = ()) -> tuple[dict, dict]:
     """(core receipt, detail record). The caller stores both together and supplies the ledger's current chain head."""
     detail = detail_record(action, idem_key, policy_version, outcome, result_id, ts, approved_by)
     reasons = [*verdict.reasons, f"outcome={outcome}", f"tool={action.tool}", f"policy_version={policy_version}",
@@ -109,6 +109,7 @@ def make_receipt(signer: Signer, action: Action, idem_key: str, policy_sha: str,
         reasons.append(f"result_id={result_id}")
     if approved_by:
         reasons.append(f"approved_by={approved_by}")
+    reasons.extend(extra_reasons)
     r = core.create(subject_type="mcp_tool_call", artifact_sha256=action.sha(), policy_sha256=policy_sha, checker_name=CHECKER,
                     checker_version=CHECKER_VERSION, verdict=_VERDICT[verdict.decision], reasons=reasons,
                     trace_sha256=sha256_hex(canonical(detail)), prev_receipt_sha256=prev_receipt_sha256,

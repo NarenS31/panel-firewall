@@ -7,7 +7,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 ALLOW, NEEDS_CONSENT, BLOCK = "allow", "needs_consent", "block"
-MODES = ("dry_run", "approval", "auto")
+MODES = ("dry_run", "approval", "auto", "shadow")
+ENFORCE_MODES = ("approval", "auto")      # what `shadow` evaluates against (policy key `enforce_mode`, default approval)
 RISKS = ("read", "write", "destructive")
 
 

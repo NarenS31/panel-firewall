@@ -30,14 +30,14 @@ from pathlib import Path
 
 import yaml
 
-from panel_firewall.firewall.types import ALLOW, BLOCK, FirewallError, NEEDS_CONSENT, MODES, Action, Verdict, sha256_hex
+from panel_firewall.firewall.types import ALLOW, BLOCK, ENFORCE_MODES, FirewallError, NEEDS_CONSENT, MODES, Action, Verdict, sha256_hex
 
 OPS = ("eq", "ne", "gt", "gte", "lt", "lte", "in", "contains", "matches")
 RULE_KEYS = {"allowed", "risk", "required_fields", "amount_field", "max_amount", "consent_over_amount", "max_rows",
              "consent_over_rows", "protected", "consent_if", "block_if", "rate_limit", "max_total_amount", "sql",
              "path_args", "allowed_roots", "sql_arg", "note"}
 TOP_KEYS = {"version", "name", "mode", "reviewed", "receipts", "actions", "sql", "consent_wait_seconds", "database",
-            "session", "ledger", "connectors"}
+            "session", "ledger", "connectors", "enforce_mode"}
 
 
 @dataclass
@@ -48,6 +48,10 @@ class Policy:
     raw: dict
     sha256: str
     path: str = ""
+
+    @property
+    def enforce_mode(self) -> str:
+        return self.raw.get("enforce_mode", "approval")
 
     def rule_for(self, tool: str) -> dict | None:
         return self.actions.get(tool)
@@ -74,6 +78,8 @@ def parse_policy(raw: dict, sha: str = "") -> Policy:
     mode = raw.get("mode", "approval")
     if mode not in MODES:
         raise FirewallError(f"policy: mode must be one of {MODES}")
+    if raw.get("enforce_mode", "approval") not in ENFORCE_MODES:
+        raise FirewallError(f"policy: enforce_mode must be one of {ENFORCE_MODES}")
     actions = raw.get("actions")
     if not isinstance(actions, dict) or not actions:
         raise FirewallError("policy: `actions` must be a non-empty mapping")

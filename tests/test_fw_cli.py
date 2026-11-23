@@ -39,9 +39,12 @@ def test_cli_approve_flow_in_a_second_process_and_verify(env, capsys):
     fw = build_firewall(str(pol), key=str(key))
     o = fw.handle(Action("sql.query", {"sql": "DELETE FROM t WHERE id < 3"}, "c"))
     assert o.status == "needs_consent"
-    r = subprocess.run([sys.executable, "-m", "panel_firewall.firewall", "approve", o.approval_id, "--policy", str(pol), "--who", "dana"],
-                       cwd=ROOT, capture_output=True, text=True)
-    assert r.returncode == 0 and "OK: approved by dana" in r.stdout, r.stderr
+    from panel_firewall.firewall.pin import PinStore
+    PinStore(tmp / "pin.json").set_pin("correct horse", n=2 ** 10)
+    from tests.pty_helpers import panel, run_on_tty
+    code, out = run_on_tty(panel("approve", o.approval_id, "--policy", str(pol), "--who", "dana", "--pin-file", str(tmp / "pin.json")),
+                           ["correct horse"], cwd=ROOT)
+    assert code == 0 and "OK: approved by dana" in out, out
     o2 = fw.handle(Action("sql.query", {"sql": "DELETE FROM t WHERE id < 3"}, "c"))
     assert o2.status == "executed" and "approved_by=dana" in o2.receipt["reasons"]
     f = tmp / "r.json"; f.write_text(json.dumps(o2.receipt))
@@ -60,7 +63,7 @@ def test_cli_deny_and_pending(env, capsys):
     o = fw.handle(Action("sql.query", {"sql": "DELETE FROM t WHERE id < 3"}, "c"))
     assert main(["pending", "--policy", str(pol)]) == 0 and o.approval_id in capsys.readouterr().out
     assert main(["deny", o.approval_id, "--policy", str(pol), "--who", "e"]) == 0
-    assert main(["approve", o.approval_id, "--policy", str(pol), "--who", "e"]) == 1
+    assert main(["approve", o.approval_id, "--policy", str(pol), "--who", "e", "--pin-file", str(tmp / "nopin.json")]) == 1
     assert fw.handle(Action("sql.query", {"sql": "DELETE FROM t WHERE id < 3"}, "c")).status == "blocked"
 
 

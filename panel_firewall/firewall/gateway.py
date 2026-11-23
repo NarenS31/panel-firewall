@@ -422,7 +422,10 @@ async def stdio_streams():
 
 
 def _setup(a, upstream_cmds: list[tuple[str, list[str]]], with_native: bool):
-    fw = build_firewall(a.policy, a.ledger, a.key, connectors=[])
+    fw = build_firewall(a.policy, a.ledger, a.key, connectors=[], mode="shadow" if getattr(a, "shadow", False) else None)
+    if fw.mode == "shadow":
+        print("panel: SHADOW MODE: every action runs; Panel only records what enforcement WOULD have blocked or held. "
+              "Read it with `usepanel report`. Nothing is being protected yet.", file=sys.stderr)
     native = native_connectors(fw.policy) if with_native else []
     gw = Gateway(fw, [], native, getattr(a, "session", None) or fw.policy.raw.get("session", "default"))
     for name, cmd in upstream_cmds:
