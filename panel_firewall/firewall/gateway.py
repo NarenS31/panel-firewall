@@ -448,11 +448,35 @@ def _run(gw: Gateway) -> int:
     return asyncio.run(main())
 
 
+def _start_cloud(a, gw):
+    """If --cloud-url was given: start the background sync that keeps policy, events and approvals flowing. Returns it (or None)."""
+    cs = getattr(a, "_cloud", None)
+    if not cs:
+        return None
+    from panel_firewall.firewall.cloud import CloudSync
+    client, state, pm = cs
+    sync = CloudSync(client, state, pm, gw.fw, forced_shadow=bool(getattr(a, "shadow", False)))
+    sync.apply_policy(pm.policy)
+    print(f"panel: connected to Panel Cloud workspace {pm.workspace_id}; policy v{pm.version} ({gw.fw.mode}). Ledger: {a.ledger}\n"
+          f"panel: approve held actions at the terminal with `usepanel approve <id> --ledger {a.ledger}` or in the Panel Cloud dashboard.", file=sys.stderr)
+    sync.start()
+    return sync
+
+
+def _prepare_cloud(a) -> None:
+    if getattr(a, "cloud_url", None):
+        from panel_firewall.firewall.cloud import bootstrap_cloud
+        a._cloud = bootstrap_cloud(a)               # sets a.policy (the verified policy file) and a.ledger; refuses to start with no policy
+    elif not getattr(a, "policy", None):
+        raise FirewallError("pass --policy FILE, or --cloud-url and --api-key to use a Panel Cloud policy")
+
+
 def run_proxy(a) -> int:
     cmd = [x for x in a.upstream]
     if cmd and cmd[0] == "--":
         cmd = cmd[1:]
     from panel_firewall.firewall.policy import load_policy
+    _prepare_cloud(a)
     pol = load_policy(a.policy)
     if pol.raw.get("reviewed") is False:
         print("panel: WARNING: this policy says `reviewed: false` (a generated starter). Defaults are conservative, but have "
@@ -461,9 +485,19 @@ def run_proxy(a) -> int:
     if not ups:
         raise FirewallError("no upstream: pass `-- <command>` or list `type: upstream` connectors in the policy")
     logging.basicConfig(level=logging.INFO, stream=sys.stderr, format="panel: %(message)s")
-    return _run(_setup(a, ups, with_native=True))
+    return _run_with_cloud(a, _setup(a, ups, with_native=True))
+
+
+def _run_with_cloud(a, gw) -> int:
+    sync = _start_cloud(a, gw)
+    try:
+        return _run(gw)
+    finally:
+        if sync:
+            sync.stop()
 
 
 def run_serve(a) -> int:
     logging.basicConfig(level=logging.INFO, stream=sys.stderr, format="panel: %(message)s")
-    return _run(_setup(a, [], with_native=True))
+    _prepare_cloud(a)
+    return _run_with_cloud(a, _setup(a, [], with_native=True))

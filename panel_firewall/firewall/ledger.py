@@ -107,7 +107,8 @@ class Ledger:
                 return None
             return json.loads(row[1])["action_sha"]
 
-    def approve(self, aid: str, who: str, deny: bool = False, reason: str = "", token: dict | None = None) -> tuple[bool, str]:
+    def approve(self, aid: str, who: str, deny: bool = False, reason: str = "", token: dict | None = None,
+                proof: dict | None = None) -> tuple[bool, str]:
         """Out-of-band consent. Only a `pending` key can be approved/denied, once. When `self.guard` is set (the CLI and the
         UI always set it), an APPROVAL needs a token minted after a correct PIN: bound to this approval id + action sha, not
         expired, and its nonce never used before (single use). Denials never need one."""
@@ -117,14 +118,14 @@ class Ledger:
         with self._lock:
             self._db.execute("BEGIN IMMEDIATE")
             try:
-                out = self._approve_locked(aid, who, deny, reason, token)
+                out = self._approve_locked(aid, who, deny, reason, token, proof)
                 self._db.execute("COMMIT")
                 return out
             except BaseException:
                 self._db.execute("ROLLBACK")
                 raise
 
-    def _approve_locked(self, aid, who, deny, reason, token) -> tuple[bool, str]:
+    def _approve_locked(self, aid, who, deny, reason, token, proof=None) -> tuple[bool, str]:
         row = self._db.execute("""SELECT idem_key, conversation_id, tool, data FROM events WHERE event='pending'
                                   AND json_extract(data,'$.approval_id')=? ORDER BY seq DESC LIMIT 1""", (aid,)).fetchone()
         if not row:
@@ -134,7 +135,10 @@ class Ledger:
         if st != "pending":
             return False, f"action {aid} is already {st}"
         sha = json.loads(data)["action_sha"]
-        extra: dict = {}
+        extra: dict = dict(proof or {})      # e.g. the Panel Cloud decision's nonce and signature (verified by the caller)
+        if extra.get("cloud_nonce") and self._db.execute("""SELECT 1 FROM events WHERE event IN ('approved','denied')
+                                                         AND json_extract(data,'$.cloud_nonce')=? LIMIT 1""", (extra["cloud_nonce"],)).fetchone():
+            return False, "refused: this cloud decision was already used"
         if self.guard is not None and not deny:
             why = self.guard.check_token(token, aid, sha, deny)
             if why:
@@ -143,7 +147,7 @@ class Ledger:
                                        AND json_extract(data,'$.token_nonce')=? LIMIT 1""", (token["nonce"],)).fetchone()
             if used:
                 return False, "refused: approval token was already used"
-            extra = {"token_nonce": token["nonce"], "pin_verified": True}
+            extra = {**extra, "token_nonce": token["nonce"], "pin_verified": True}
         self.append(key, conv, tool, "denied" if deny else "approved",
                     {"approval_id": aid, "who": who, "reason": reason, "action_sha": sha, **extra})
         return True, "denied" if deny else "approved"

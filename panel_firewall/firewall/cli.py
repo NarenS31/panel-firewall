@@ -179,6 +179,13 @@ def main(argv=None) -> int:
             p.add_argument("--policy", help="policy file (YAML)")
         p.add_argument("--ledger", help="ledger SQLite path (default: next to the policy)")
 
+    def cloud_flags(p):
+        p.add_argument("--cloud-url", help="Panel Cloud API URL: take the signed policy from the cloud, report data-minimised events, accept cloud approvals")
+        p.add_argument("--api-key", help="workspace API key (visible in the process list; prefer --api-key-file or PANEL_API_KEY)")
+        p.add_argument("--api-key-file", help="file containing the workspace API key")
+        p.add_argument("--cloud-pubkey", help="pin the cloud's Ed25519 policy-signing key (base64) instead of trusting the first one seen")
+        p.add_argument("--cloud-state-dir", help="where the cached signed policy, pinned key and upload cursor live (default ~/.config/panel/cloud/<id>)")
+
     p = sub.add_parser("keygen", help="create the Ed25519 receipt-signing key (outside the repo)")
     p.add_argument("--path"); p.add_argument("--force", action="store_true"); p.set_defaults(fn=cmd_keygen)
     p = sub.add_parser("pin", help="set or check the approval PIN (typed at the terminal only)")
@@ -212,10 +219,11 @@ def main(argv=None) -> int:
     p = sub.add_parser("proxy", help="wrap an existing MCP server: usepanel proxy --policy p.yaml -- <upstream cmd>")
     common(p); p.add_argument("--key"); p.add_argument("--session", default="default")
     p.add_argument("--shadow", action="store_true", help="evaluate everything and log what WOULD be blocked/held, but let actions run")
+    cloud_flags(p)
     p.add_argument("upstream", nargs=argparse.REMAINDER); p.set_defaults(fn=cmd_proxy)
     p = sub.add_parser("serve", help="serve the policy's native connectors (sqlite/stripe/shopify) as an MCP server")
     common(p); p.add_argument("--key"); p.add_argument("--session", default="default")
-    p.add_argument("--shadow", action="store_true", help="shadow mode (see proxy --shadow)"); p.set_defaults(fn=cmd_serve)
+    p.add_argument("--shadow", action="store_true", help="shadow mode (see proxy --shadow)"); cloud_flags(p); p.set_defaults(fn=cmd_serve)
     a = ap.parse_args(argv)
     try:
         return a.fn(a)
