@@ -244,7 +244,8 @@ def receipt_event(ledger_id: str, seq: int, receipt: dict, detail: dict, policy:
     out = {"id": f"{ledger_id}-{seq}", "ts": float(detail.get("timestamp") or time.time()), "tool": detail["tool"], "verdict": verdict,
            "outcome": outcome if outcome in ("executed", "blocked", "failed", "dry_run", "replayed") else "executed",
            "mode": "shadow" if shadow else "enforce", "summary": summary, "action_sha256": receipt["artifact_sha256"],
-           "receipt_sha256": core.receipt_hash(receipt), "policy_sha256": receipt["policy_sha256"]}
+           "receipt_sha256": core.receipt_hash(receipt), "policy_sha256": receipt["policy_sha256"],
+           "receipt": receipt}                   # the signed receipt itself: hashes, verdict and reasons, never arguments; the cloud verifies the signature
     if would:
         out["shadow_would"] = would
     if rule:

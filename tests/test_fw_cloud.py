@@ -216,7 +216,10 @@ def test_events_are_data_minimised_and_cursor_based(rig):
     assert e["tool"] == "fake.pay" and e["verdict"] == "block" and e["mode"] == "shadow" and e["shadow_would"] == "block"
     assert e["rule"] == "max_amount" and e["amount"] == 500.0 and "would have been BLOCKED" in e["summary"]
     assert len(e["receipt_sha256"]) == 64 and len(e["action_sha256"]) == 64 and e["policy_sha256"] == pm.policy.sha256
-    assert set(e) <= {"id", "ts", "tool", "verdict", "outcome", "mode", "shadow_would", "rule", "amount", "summary", "action_sha256", "receipt_sha256", "policy_sha256"}
+    assert set(e) <= {"id", "ts", "tool", "verdict", "outcome", "mode", "shadow_would", "rule", "amount", "summary", "action_sha256", "receipt_sha256", "policy_sha256", "receipt"}
+    assert e["receipt"]["signature"] and e["receipt"]["artifact_sha256"] == e["action_sha256"]
+    from tenthlook_core import receipt as core_receipt
+    assert core_receipt.verify(e["receipt"]).ok and core_receipt.receipt_hash(e["receipt"]) == e["receipt_sha256"]
     assert sync.upload_events() == 0                                  # cursor moved: nothing re-sent
 
 
