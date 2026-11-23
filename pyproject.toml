@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "panel-firewall"
+version = "0.1.0"
+description = "Panel checks what an AI agent says and what it does: an action firewall (MCP proxy, deterministic policy, consent, idempotency, signed receipts) and a support-bot guard."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"          # SPDX; matches the monorepo LICENSE (owner approved 2026-11-23)
+license-files = ["LICENSE"]
+keywords = ["ai-agents", "mcp", "guardrails", "policy", "receipts", "llm-safety"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3.11",
+  "Topic :: Security",
+  "Topic :: Software Development :: Libraries",
+]
+dependencies = [
+  "sqlglot==30.33.0",
+  "cryptography>=46",
+  "tenthlook-core>=0.1",    # NOT on PyPI yet: publish it first or install it from source
+  "PyYAML>=6",
+  "httpx>=0.28",
+  "numpy>=1.26",            # the vendored policy graph uses it
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-asyncio"]
+llm = ["openai>=1"]          # only for eval/run_llm_eval.py
+
+[project.scripts]
+usepanel = "panel_firewall.firewall.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["panel_firewall*"]
+
+[tool.setuptools.package-data]
+panel_firewall = ["guard/static/*", "guard/data/*"]

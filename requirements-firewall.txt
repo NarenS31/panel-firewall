@@ -1,0 +1,8 @@
+sqlglot==30.33.0
+cryptography>=46
+tenthlook-core>=0.1
+PyYAML>=6
+httpx>=0.28
+numpy
+pytest
+pytest-asyncio

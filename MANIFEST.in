@@ -1,0 +1,9 @@
+include LICENSE README.md KNOWN_ISSUES.md FIREWALL.md GUARD_README.md SHOPIFY.md
+recursive-include examples *
+prune tests
+prune eval
+prune results
+prune guard_data
+prune guard_results
+prune scripts
+global-exclude *.pyc __pycache__
