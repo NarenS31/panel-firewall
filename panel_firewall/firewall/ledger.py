@@ -14,6 +14,7 @@ A key left in `claimed` with no outcome (crash mid-call) is NOT retried automati
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import threading
 import time
@@ -208,6 +209,70 @@ class Ledger:
         rows = self._rows("""SELECT ts, json_extract(data,'$.amount') FROM events WHERE event='executed' AND tool=? AND ts>?
                              ORDER BY seq""", (tool, since_ts))
         return [(r[0], r[1]) for r in rows]
+
+    def executed_with_field(self, tool: str, field: str, value, since_ts: float) -> list[float]:
+        """Timestamps of EXECUTED actions of `tool` whose request carried args[field] == value (shadow executions count: they really ran)."""
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", field):
+            return []
+        v = value if isinstance(value, (int, float, str)) and not isinstance(value, bool) else json.dumps(value)
+        rows = self._rows("""SELECT e.ts FROM events e JOIN events r ON r.idem_key = e.idem_key AND r.event = 'requested'
+                             WHERE e.event = 'executed' AND e.tool = ? AND e.ts > ? AND json_extract(r.data, ?) = ? ORDER BY e.seq""",
+                          (tool, since_ts, f'$.args."{field}"', v))
+        return [r[0] for r in rows]
+
+    # ------------------------------------------------------------------ circuit breaker
+    BREAKER_KEY = "circuit-breaker"
+
+    def trip_count(self, since_ts: float) -> int:
+        """Enforced blocks (not human denials, not blocks caused by an active freeze) since `since_ts`."""
+        return self._rows("SELECT COUNT(*) FROM events WHERE event='blocked' AND ts>? AND json_extract(data,'$.trip')=1", (since_ts,))[0][0]
+
+    def freeze_state(self) -> dict | None:
+        """The active freeze (its event data plus `seq` and `ts`), or None when writes are not frozen."""
+        rows = self._rows("SELECT seq, ts, event, data FROM events WHERE idem_key=? ORDER BY seq DESC LIMIT 1", (self.BREAKER_KEY,))
+        if not rows or rows[0][2] != "freeze":
+            return None
+        return {**json.loads(rows[0][3]), "seq": rows[0][0], "ts": rows[0][1]}
+
+    def freeze(self, reason: str, blocks: int, per_seconds: float) -> bool:
+        """Record a freeze unless one is already active. Returns True if this call froze."""
+        with self._lock:
+            self._db.execute("BEGIN IMMEDIATE")
+            try:
+                if self.freeze_state() is not None:
+                    self._db.execute("COMMIT"); return False
+                self.append(self.BREAKER_KEY, "", "*", "freeze", {"reason": reason, "blocks": blocks, "per_seconds": per_seconds})
+                self._db.execute("COMMIT"); return True
+            except BaseException:
+                self._db.execute("ROLLBACK"); raise
+
+    def unfreeze(self, who: str, token: dict | None = None, proof: dict | None = None) -> tuple[bool, str]:
+        """A human lifts the freeze. With a PIN guard installed (CLI / UI) it needs a token minted after a correct PIN, bound to this
+        exact freeze and used once, like an approval. A verified Panel Cloud decision is passed as `proof` (single-use nonce)."""
+        who = (who or "").strip()
+        if not who:
+            return False, "who is required"
+        with self._lock:
+            self._db.execute("BEGIN IMMEDIATE")
+            try:
+                fs = self.freeze_state()
+                if fs is None:
+                    self._db.execute("ROLLBACK"); return False, "writes are not frozen"
+                ref = f"freeze-{fs['seq']}"
+                extra = dict(proof or {})
+                if extra.get("cloud_nonce") and self._db.execute("SELECT 1 FROM events WHERE event='unfreeze' AND json_extract(data,'$.cloud_nonce')=? LIMIT 1", (extra["cloud_nonce"],)).fetchone():
+                    self._db.execute("ROLLBACK"); return False, "refused: this cloud decision was already used"
+                if self.guard is not None and not extra.get("cloud_nonce"):
+                    why = self.guard.check_token(token, ref, ref, False)
+                    if why:
+                        self._db.execute("ROLLBACK"); return False, f"refused: {why}"
+                    if self._db.execute("SELECT 1 FROM events WHERE event IN ('approved','denied','unfreeze') AND json_extract(data,'$.token_nonce')=? LIMIT 1", (token["nonce"],)).fetchone():
+                        self._db.execute("ROLLBACK"); return False, "refused: approval token was already used"
+                    extra = {**extra, "token_nonce": token["nonce"], "pin_verified": True}
+                self.append(self.BREAKER_KEY, "", "*", "unfreeze", {"who": who, "freeze_seq": fs["seq"], **extra})
+                self._db.execute("COMMIT"); return True, "unfrozen"
+            except BaseException:
+                self._db.execute("ROLLBACK"); raise
 
     def executed_in_conversation(self, conversation_id: str) -> list[dict]:
         return [e for e in self.events(conversation_id=conversation_id, limit=100000) if e["event"] == "executed"]

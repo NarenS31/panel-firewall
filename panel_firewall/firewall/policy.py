@@ -18,7 +18,12 @@ Rule keys (all optional except where noted), per action name under `actions:`:
   block_if:   [{field, op, value}] same operators -> block
   rate_limit: {max: n, per_seconds: s}        n executions already in the window -> block
   max_total_amount: {amount: n, per_seconds: s}   executed total + this amount > n -> block
+  duplicate_guard: {field: str, within_seconds: s}   a second EXECUTED action of this tool with the same value in `field`
+                           (for example order_id) inside the window -> needs_consent (a human may approve it). A missing field blocks.
   sql: {...}               SQL guard settings (see sqlguard.py)
+
+Top-level (optional): circuit_breaker: {blocks: 3, per_seconds: 60}   N enforced blocks inside T seconds freeze every non-read tool
+  until a human unfreezes with the PIN (`usepanel unfreeze`). Absent = off; `circuit_breaker: {}` = the defaults (3 blocks / 60 s).
 """
 from __future__ import annotations
 
@@ -35,9 +40,9 @@ from panel_firewall.firewall.types import ALLOW, BLOCK, ENFORCE_MODES, FirewallE
 OPS = ("eq", "ne", "gt", "gte", "lt", "lte", "in", "contains", "matches")
 RULE_KEYS = {"allowed", "risk", "required_fields", "amount_field", "max_amount", "consent_over_amount", "max_rows",
              "consent_over_rows", "protected", "consent_if", "block_if", "rate_limit", "max_total_amount", "sql",
-             "path_args", "allowed_roots", "sql_arg", "note"}
+             "path_args", "allowed_roots", "sql_arg", "note", "duplicate_guard"}
 TOP_KEYS = {"version", "name", "mode", "reviewed", "receipts", "actions", "sql", "consent_wait_seconds", "database",
-            "session", "ledger", "connectors", "enforce_mode"}
+            "session", "ledger", "connectors", "enforce_mode", "circuit_breaker"}
 
 
 @dataclass
@@ -100,6 +105,18 @@ def parse_policy(raw: dict, sha: str = "") -> Policy:
         for k in ("rate_limit", "max_total_amount"):
             if k in rule and not (isinstance(rule[k], dict) and rule[k].get("per_seconds", 0) > 0):
                 raise FirewallError(f"policy: actions.{name}.{k} needs a positive per_seconds")
+        dg = rule.get("duplicate_guard")
+        if dg is not None and not (isinstance(dg, dict) and set(dg) <= {"field", "within_seconds"} and isinstance(dg.get("field"), str)
+                                   and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", dg["field"])
+                                   and isinstance(dg.get("within_seconds"), (int, float)) and not isinstance(dg["within_seconds"], bool) and dg["within_seconds"] > 0):
+            raise FirewallError(f"policy: actions.{name}.duplicate_guard needs a field name and a positive within_seconds")
+    cb = raw.get("circuit_breaker")
+    if cb is not None:
+        if not isinstance(cb, dict) or set(cb) - {"blocks", "per_seconds", "enabled"}:
+            raise FirewallError("policy: circuit_breaker takes only blocks, per_seconds, enabled")
+        for k in ("blocks", "per_seconds"):
+            if k in cb and (isinstance(cb[k], bool) or not isinstance(cb[k], (int, float)) or cb[k] < 1):
+                raise FirewallError(f"policy: circuit_breaker.{k} must be a number of at least 1")
     return Policy(str(raw.get("version", "0")), mode, actions, raw, sha)
 
 
@@ -107,10 +124,11 @@ def parse_policy(raw: dict, sha: str = "") -> Policy:
 class LedgerState:
     """Snapshot of executed actions for one tool: [(timestamp, amount_or_None)]. Built by the caller from the ledger."""
     executed: list = field(default_factory=list)
+    same_field: list = field(default_factory=list)      # timestamps of executed actions of this tool with the same duplicate_guard value
 
 
 def window_needed(rule: dict) -> float:
-    return max(float((rule.get("rate_limit") or {}).get("per_seconds", 0)),
+    return max(float((rule.get("duplicate_guard") or {}).get("within_seconds", 0)), float((rule.get("rate_limit") or {}).get("per_seconds", 0)),
                float((rule.get("max_total_amount") or {}).get("per_seconds", 0)))
 
 
@@ -201,6 +219,14 @@ def evaluate(action: Action, rule: dict | None, facts: dict, state: LedgerState,
                     consent.append(f"cannot evaluate condition on '{c['field']}'; asking a human")
             elif r:
                 bucket.append(f"{label}: {c['field']} {c['op']} {c.get('value')!r}")
+    dg = rule.get("duplicate_guard")
+    if dg:
+        if args.get(dg["field"]) in (None, ""):
+            blocks.append(f"missing '{dg['field']}', which the duplicate guard needs")
+        elif state.same_field:
+            days = (now - max(state.same_field)) / 86400
+            consent.append(f"{dg['field']} {args[dg['field']]!r} already had a {action.tool} {days:.1f} days ago "
+                           f"(within {dg['within_seconds'] / 86400:g} days); a human must approve a second one")
     rl = rule.get("rate_limit")
     if rl:
         n = sum(1 for ts, _ in state.executed if ts > now - rl["per_seconds"])

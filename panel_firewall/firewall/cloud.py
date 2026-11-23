@@ -130,6 +130,7 @@ class CloudClient:
     def policy(self) -> dict: return self._req("GET", "/v1/policy")
     def ping(self) -> dict: return self._req("GET", "/v1/ping")
     def events(self, events: list[dict]) -> dict: return self._req("POST", "/v1/events", json={"events": events})
+    def freeze(self) -> dict: return self._req("GET", "/v1/proxy/freeze")
     def tools(self, tools: list[dict]) -> dict: return self._req("POST", "/v1/proxy/tools", json={"tools": tools})
     def request_approval(self, body: dict) -> dict: return self._req("POST", "/v1/approvals", json=body)
     def approval(self, aid: str, wait: int = 0) -> dict:
@@ -243,7 +244,7 @@ def receipt_event(ledger_id: str, seq: int, receipt: dict, detail: dict, policy:
     ev_name = "shadow" if (shadow and would) else {"executed": "executed", "blocked": "blocked"}.get(outcome, outcome)
     summary = summarize(detail["tool"], ev_name, {"amount": amount, "reasons": plain, "would": would})
     out = {"id": f"{ledger_id}-{seq}", "ts": float(detail.get("timestamp") or time.time()), "tool": detail["tool"], "verdict": verdict,
-           "outcome": outcome if outcome in ("executed", "blocked", "failed", "dry_run", "replayed") else "executed",
+           "outcome": outcome if outcome in ("executed", "blocked", "failed", "dry_run", "replayed", "frozen", "unfrozen") else "executed",
            "mode": "shadow" if shadow else "enforce", "summary": summary, "action_sha256": receipt["artifact_sha256"],
            "receipt_sha256": core.receipt_hash(receipt), "policy_sha256": receipt["policy_sha256"],
            "receipt": receipt}                   # the signed receipt itself: hashes, verdict and reasons, never arguments; the cloud verifies the signature
@@ -422,6 +423,39 @@ class CloudSync:
         log.info("cloud decision for %s: %s (%s)", aid, d["decision"], msg)
         return ok
 
+    def check_unfreeze(self) -> bool:
+        """If this proxy is frozen by its circuit breaker, ask the cloud whether a signed unfreeze decision exists for THIS freeze, and apply it
+        only if everything checks out (signature, workspace, the exact freeze receipt, expiry, single-use nonce)."""
+        if self.fw.frozen() is None:
+            return False
+        from tenthlook_core import receipt as core
+        frozen = [r for r in self.fw.ledger.receipts() if "outcome=frozen" in r["reasons"]]
+        if not frozen:
+            return False
+        local = core.receipt_hash(frozen[-1])
+        try:
+            r = self.client.freeze()
+        except CloudError as e:
+            self._offline(e); return False
+        self._online()
+        pub, text, sig = self.pm.public_key, (r.get("unfreeze") or {}).get("decision"), (r.get("unfreeze") or {}).get("signature")
+        if not text:
+            return False
+        if not (isinstance(text, str) and isinstance(sig, str) and pub and verify_signature(pub, text, sig)):
+            log.error("cloud unfreeze has an invalid signature; ignored (writes stay frozen)"); return False
+        d = json.loads(text); why = None
+        if d.get("type") != "unfreeze": why = "wrong type"
+        elif d.get("workspace_id") != self.pm.workspace_id: why = "different workspace"
+        elif d.get("freeze_receipt_sha256") != local: why = "bound to a different freeze"
+        elif self.clock() > float(d.get("expires_at", 0)): why = "expired"
+        elif not d.get("nonce") or self.state.nonce_used(d["nonce"]): why = "nonce already used"
+        if why:
+            log.error("cloud unfreeze refused (%s); writes stay frozen", why); return False
+        self.state.use_nonce(d["nonce"])
+        ok, msg = self.fw.unfreeze(f"cloud:{d.get('decided_by', '?')}", proof={"cloud_nonce": d["nonce"], "cloud_sig": sig[:32], "cloud_decided_at": d.get("decided_at")})
+        log.info("cloud unfreeze: %s", msg)
+        return ok
+
     # -- loop
     def _offline(self, e):
         if self.online:
@@ -440,6 +474,7 @@ class CloudSync:
         self.upload_events()
         self.register_pending()
         self.check_decisions(wait=0)
+        self.check_unfreeze()
 
     def start(self) -> None:
         def loop():

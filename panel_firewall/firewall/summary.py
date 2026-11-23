@@ -13,6 +13,8 @@ from panel_firewall.firewall.scrub import scrub, scrub_text
 
 # reason text (as produced by policy.evaluate, sqlguard and the connectors) -> the rule that produced it
 _RULES = [
+    (r"already had a .* ago|which the duplicate guard needs", "duplicate_guard"),
+    (r"^circuit breaker", "circuit_breaker"),
     (r"is not allowed by policy", "allowed"),
     (r"^unknown action|no connector handles it", "unknown_action"),
     (r"^missing required field", "required_fields"),
@@ -66,8 +68,9 @@ def summarize(tool: str, event: str, data: dict) -> str:
         return scrub_text(f"{tool}{of} {verb}: {why}" if why else f"{tool}{of} {verb}")
     verb = {"executed": "ran", "read": "ran (read)", "blocked": "was blocked", "pending": "is waiting for approval",
             "approved": "was approved by a human", "denied": "was denied by a human", "failed": "failed", "dry_run": "was checked (dry run)",
-            "requested": "was requested", "unknown_outcome": "has an unknown outcome"}.get(event, event)
-    return scrub_text(f"{tool}{of} {verb}" + (f": {why}" if why and event in ("blocked", "pending") else ""))
+            "requested": "was requested", "unknown_outcome": "has an unknown outcome",
+            "frozen": "froze every tool that changes something", "unfrozen": "was unfrozen by a human"}.get(event, event)
+    return scrub_text(f"{tool}{of} {verb}" + (f": {why}" if why and event in ("blocked", "pending", "frozen", "unfrozen") else ""))
 
 
 def _amount_for(ledger, policy, ev) -> float | None:

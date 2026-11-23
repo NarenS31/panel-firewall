@@ -5,6 +5,7 @@ import argparse
 import getpass
 import json
 import sys
+import time
 from pathlib import Path
 
 from panel_firewall.firewall.types import FirewallError
@@ -50,6 +51,38 @@ def _decide(a, deny):
         print(f"NOT DONE: {e}")
         return 1
     print(("OK: " if ok else "NOT DONE: ") + msg + (f" by {who}" if ok else ""))
+    return 0 if ok else 1
+
+
+def cmd_unfreeze(a):
+    """Lift a circuit-breaker freeze. Needs the approval PIN, typed on the terminal, like an approval."""
+    from panel_firewall.firewall.config import ledger_path
+    from panel_firewall.firewall.engine import Firewall
+    from panel_firewall.firewall.ledger import Ledger
+    from panel_firewall.firewall.pin import ApprovalGate, PinError, PinStore, read_secret_from_tty
+    from panel_firewall.firewall.policy import load_policy
+    from panel_firewall.firewall.receipts import Signer
+    pol = load_policy(a.policy) if a.policy else None
+    led = Ledger(ledger_path(pol, a.ledger) if pol else a.ledger)
+    fs = led.freeze_state()
+    if fs is None:
+        print("Writes are not frozen.")
+        return 0
+    print(f"Frozen since {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(fs['ts']))}: {fs.get('reason', '')}")
+    store = PinStore(a.pin_file)
+    try:
+        ApprovalGate(led, store)
+        if not store.is_set():
+            raise PinError("no approval PIN is set; run `usepanel pin set` first")
+        store.verify(read_secret_from_tty("Approval PIN (typed by you, never by the agent): "))
+        ref = f"freeze-{fs['seq']}"
+        token = store.mint(ref, ref, deny=False)
+        fw = Firewall(pol, led, Signer.load(getattr(a, "key", None)), []) if pol else None
+        ok, msg = (fw.unfreeze(a.who or getpass.getuser(), token) if fw else led.unfreeze(a.who or getpass.getuser(), token))
+    except PinError as e:
+        print(f"NOT DONE: {e}")
+        return 1
+    print(("OK: " if ok else "NOT DONE: ") + msg)
     return 0 if ok else 1
 
 
@@ -200,6 +233,8 @@ def main(argv=None) -> int:
         p = sub.add_parser(name, help=f"{name} a held action (the only way consent is granted, besides `usepanel ui`)")
         p.add_argument("id"); p.add_argument("--who"); p.add_argument("--reason"); p.add_argument("--pin-file"); common(p)
         p.set_defaults(fn=lambda a, d=deny: _decide(a, d))
+    p = sub.add_parser("unfreeze", help="lift a circuit-breaker freeze (needs the approval PIN)"); common(p)
+    p.add_argument("--who"); p.add_argument("--pin-file"); p.add_argument("--key"); p.set_defaults(fn=cmd_unfreeze)
     p = sub.add_parser("ui", help="local approval UI on 127.0.0.1"); common(p); p.add_argument("--port", type=int, default=8765); p.add_argument("--pin-file")
     p.add_argument("--who"); p.set_defaults(fn=cmd_ui)
     p = sub.add_parser("verify-receipt", help="check a receipt's signature and hashes")

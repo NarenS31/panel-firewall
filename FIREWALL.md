@@ -71,8 +71,19 @@ that have a shell under a separate OS user or sandbox, or approve from another d
 
 See `examples/` and the docstring at the top of `panel_firewall/firewall/policy.py` (rule keys: `allowed`, `risk`, `required_fields`,
 `amount_field`, `max_amount`, `consent_over_amount`, `max_rows`, `consent_over_rows`, `protected`, `consent_if`, `block_if`,
-`rate_limit`, `max_total_amount`, `sql_arg`, `path_args`, `allowed_roots`). Typos in rule keys are errors, not silent no-ops.
+`rate_limit`, `max_total_amount`, `duplicate_guard`, `sql_arg`, `path_args`, `allowed_roots`). Typos in rule keys are errors, not silent no-ops.
 Unlisted tools are blocked. Modes: `dry_run` (nothing executes), `approval` (every non-read action needs a human), `auto`, `shadow` (log only, nothing enforced).
+
+### Per-order duplicate guard
+`duplicate_guard: {field: order_id, within_seconds: 604800}` on a tool: a second action with the same `order_id` that EXECUTED inside the window is held for a
+human (`needs_consent`), so a refund on an order that already had one needs approval. A missing `order_id` blocks. It complements, and does not replace, the
+built-in idempotency: running the exact same action twice only ever executes once.
+
+### Circuit breaker
+`circuit_breaker: {blocks: 3, per_seconds: 60}` (top level; `{}` means those defaults; absent means off; never acts in shadow mode). When that many enforced
+blocks happen inside the window, every tool that is not a read is frozen and a signed receipt (`outcome=frozen`) is written. A human lifts it with
+`usepanel unfreeze` (approval PIN, typed on the terminal) or, with Panel Cloud, with a signed unfreeze decision bound to that exact freeze. A human's own
+denial and the blocks caused by the freeze itself do not count toward tripping it.
 
 ## Receipts
 

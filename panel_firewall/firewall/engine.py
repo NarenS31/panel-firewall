@@ -61,9 +61,48 @@ class Firewall:
                     return a.risk
         return "write"
 
-    def _state(self, tool: str, now: float) -> LedgerState:
-        w = window_needed(self.policy.rule_for(tool) or {})
-        return LedgerState(self.ledger.executed_for(tool, now - w) if w else [])
+    def _state(self, tool: str, now: float, action: Action | None = None) -> LedgerState:
+        rule = self.policy.rule_for(tool) or {}
+        w = window_needed(rule)
+        st = LedgerState(self.ledger.executed_for(tool, now - w) if w else [])
+        dg = rule.get("duplicate_guard")
+        if dg and action is not None and isinstance(action.args, dict) and action.args.get(dg["field"]) not in (None, ""):
+            st.same_field = self.ledger.executed_with_field(tool, dg["field"], action.args[dg["field"]], now - float(dg["within_seconds"]))
+        return st
+
+    # -------------------------------------------------------------- circuit breaker
+    def _breaker(self) -> dict | None:
+        """The policy's circuit-breaker settings (defaults filled in), or None when it is off. It never acts in shadow mode."""
+        cb = self.policy.raw.get("circuit_breaker")
+        if cb is None or cb.get("enabled") is False or self.mode == "shadow":
+            return None
+        return {"blocks": int(cb.get("blocks", 3)), "per_seconds": float(cb.get("per_seconds", 60))}
+
+    def frozen(self) -> dict | None:
+        return self.ledger.freeze_state() if self._breaker() else None
+
+    def _maybe_trip(self, now: float) -> None:
+        cb = self._breaker()
+        if not cb or self.ledger.freeze_state() is not None:
+            return
+        n = self.ledger.trip_count(now - cb["per_seconds"])
+        if n < cb["blocks"]:
+            return
+        reason = f"circuit breaker tripped: {n} blocked actions in {cb['per_seconds']:g}s (limit {cb['blocks']}); every tool that is not a read is frozen"
+        if self.ledger.freeze(reason, n, cb["per_seconds"]):
+            log.error("[circuit breaker] %s. A human must run `usepanel unfreeze`.", reason)
+            self._breaker_receipt("frozen", reason, n, cb["per_seconds"], None)
+
+    def _breaker_receipt(self, outcome: str, reason: str, n: int, per: float, who: str | None) -> dict | None:
+        a = Action("panel.circuit_breaker", {"blocks": n, "per_seconds": per}, "circuit-breaker")
+        return self._receipt(a, f"breaker-{outcome}-{int(self.clock() * 1000)}", Verdict(BLOCK if outcome == "frozen" else ALLOW, [reason]), outcome, None, who)
+
+    def unfreeze(self, who: str, token: dict | None = None, proof: dict | None = None) -> tuple[bool, str]:
+        fs = self.ledger.freeze_state()
+        ok, msg = self.ledger.unfreeze(who, token, proof)
+        if ok and fs:
+            self._breaker_receipt("unfrozen", f"circuit breaker lifted by {who}", fs.get("blocks", 0), fs.get("per_seconds", 0), who)
+        return ok, msg
 
     def _amount(self, action: Action) -> float | None:
         rule = self.policy.rule_for(action.tool) or {}
@@ -79,13 +118,19 @@ class Firewall:
             log.error("could not write receipt for %s: %s", key, type(e).__name__)
             return None
 
-    def _blocked(self, action: Action, key: str, reasons: list[str], event="blocked") -> Outcome:
+    def _blocked(self, action: Action, key: str, reasons: list[str], event="blocked", trip: bool = True) -> Outcome:
+        """`trip=False` for blocks that are not evidence of a misbehaving agent (a human's denial, a freeze already in force)."""
         v = Verdict(BLOCK, reasons)
         try:
-            self.ledger.append(key, action.conversation_id, action.tool, event, {"reasons": reasons, "action_sha": _safe_sha(action)})
+            self.ledger.append(key, action.conversation_id, action.tool, event, {"reasons": reasons, "action_sha": _safe_sha(action), "trip": 1 if trip else 0})
         except Exception:
             log.error("ledger unavailable while recording a block")
         rec = self._receipt(action, key, v, "blocked", None) if _signable(action) else None
+        if trip:
+            try:
+                self._maybe_trip(self.clock())
+            except Exception:
+                log.exception("circuit breaker check failed")
         return Outcome("blocked", v, receipt=rec, idempotency_key=key)
 
     # -------------------------------------------------------------- main entry
@@ -122,7 +167,9 @@ class Firewall:
         if conn is None:
             return self._blocked(action, key, [f"unknown action '{action.tool}': no connector handles it (default deny)"])
         try:
-            v = conn.validate(action, self.policy, self._state(action.tool, now), now)
+            if self._breaker() and self._risk(action.tool, conn) != "read" and led.freeze_state() is not None:
+                return self._blocked(action, key, ["circuit breaker: writes are frozen after repeated blocked actions until a human unfreezes (usepanel unfreeze)"], trip=False)
+            v = conn.validate(action, self.policy, self._state(action.tool, now, action), now)
         except Exception as e:
             return self._blocked(action, key, [f"validation failed ({type(e).__name__}: {e}); blocked for safety"])
         led.append(key, action.conversation_id, action.tool, "requested",
@@ -141,7 +188,7 @@ class Firewall:
         approver = None
         if v.decision == NEEDS_CONSENT:
             if led.consent_state(key) == "denied":
-                return self._blocked(action, key, ["a human denied this action"])
+                return self._blocked(action, key, ["a human denied this action"], trip=False)
             ap = led.approved_for(key, sha)
             if ap is None:
                 aid = approval_id(key)
@@ -151,7 +198,7 @@ class Firewall:
                 ap = self._wait_for_approval(key, sha)
                 if ap is None:
                     if led.consent_state(key) == "denied":
-                        return self._blocked(action, key, ["a human denied this action"])
+                        return self._blocked(action, key, ["a human denied this action"], trip=False)
                     return Outcome("needs_consent", v, approval_id=aid, idempotency_key=key)
             approver = ap.get("who")
         if self._risk(action.tool, conn) == "read":
