@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "panel-firewall"
-version = "0.1.0"
+version = "0.1.1"
 description = "Panel checks what an AI agent says and what it does: an action firewall (MCP proxy, deterministic policy, consent, idempotency, signed receipts) and a support-bot guard."
 readme = "README.md"
 requires-python = ">=3.11"
-license = "MIT"          # SPDX; matches the monorepo LICENSE (owner approved 2026-11-23)
+license = "MIT"          # SPDX; matches LICENSE
 license-files = ["LICENSE"]
 keywords = ["ai-agents", "mcp", "guardrails", "policy", "receipts", "llm-safety"]
 classifiers = [
@@ -21,11 +21,18 @@ classifiers = [
 dependencies = [
   "sqlglot==30.33.0",
   "cryptography>=46",
-  "tenthlook-core>=0.1",    # NOT on PyPI yet: publish it first or install it from source
+  "tenthlook-core>=0.1",
   "PyYAML>=6",
   "httpx>=0.28",
   "numpy>=1.26",            # the vendored policy graph uses it
 ]
+
+[project.urls]
+Homepage = "https://usepanel.dev"
+Documentation = "https://usepanel.dev/how-it-works"
+Repository = "https://github.com/NarenS31/panel-firewall"
+Issues = "https://github.com/NarenS31/panel-firewall/issues"
+Changelog = "https://github.com/NarenS31/panel-firewall/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-asyncio"]

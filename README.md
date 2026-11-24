@@ -25,9 +25,9 @@ The support guard parses the bot's reply into promises and actions, checks them 
 **v7 (new) consent:** before any action runs, Panel sends a confirmation question it generates from the action ("To confirm: refund $24.00 on order #1042? Reply yes to proceed."), and only a short plain yes to *that* message counts; anything else is re-asked once, then handed to a person (`panel_firewall/guard/v7.py`, [results/v7_report.md](results/v7_report.md)). Earlier versions (v6.x) read the customer's words with phrase rules and are kept frozen.
 
 ## Install and quickstart
-Requires Python 3.11+. `tenthlook-core` is a dependency; until it is on PyPI, install it from its source first.
+Requires Python 3.11+. `tenthlook-core` (the receipt format) is installed automatically.
 ```bash
-pip install tenthlook-core panel-firewall        # or: pip install ./tenthlook-core ./panel-firewall
+pip install panel-firewall
 usepanel keygen                            # Panel will not start without a signing key (stored outside any git repo, mode 0600)
 usepanel pin set                           # your approval PIN, typed at the terminal (see "Security model"); approvals are refused without one
 usepanel init --out policy.yaml -- npx -y @modelcontextprotocol/server-filesystem /srv/data     # drafts a starter policy: REVIEW IT
@@ -38,6 +38,9 @@ usepanel report --since 48h                # plain summary: what WOULD have been
 usepanel proxy --policy policy.yaml -- npx -y @modelcontextprotocol/server-filesystem /srv/data            # enforcement: you remove --shadow, Panel never does
 
 usepanel pending ; usepanel approve <id>        # approve held actions at the terminal with your PIN (or: usepanel ui)
+usepanel doctor                            # checks your setup (key, PIN, upstream, API key, cloud) and prints the fix for each problem
+usepanel fingerprint                       # your receipt-signing key's fingerprint (Panel Cloud asks you to confirm it)
+usepanel unfreeze                          # lift a circuit-breaker freeze (needs the PIN)
 python -m panel_firewall.guard.proxy --upstream https://api.openai.com/v1 --policy my_policy.toml   # the support guard (see GUARD_README.md)
 ```
 **Shadow mode** evaluates every call against your policy, lets it run, and records "would have blocked" / "would have asked" in the ledger (receipts carry `mode=shadow`). It never switches itself to enforcing; you do that by dropping `--shadow` (or `mode: shadow` in the policy). Until then Panel protects nothing, and the proxy says so on start-up. `usepanel report --since 48h` groups the would-be decisions by tool and rule; `usepanel export-log` writes PII-scrubbed summaries (no raw arguments unless you pass `--include-raw-args`).

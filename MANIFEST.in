@@ -1,4 +1,4 @@
-include LICENSE README.md KNOWN_ISSUES.md FIREWALL.md GUARD_README.md SHOPIFY.md
+include LICENSE README.md CHANGELOG.md KNOWN_ISSUES.md FIREWALL.md GUARD_README.md SHOPIFY.md
 recursive-include examples *
 prune tests
 prune eval
