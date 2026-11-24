@@ -87,6 +87,14 @@ class Signer:
         return crypto.public_from_private(self.seed)
 
 
+def fingerprint(pubkey_b64: str) -> str:
+    """What Panel Cloud shows for a receipt-signing key: SHA-256 of the raw 32-byte public key, first 128 bits, upper-case hex in groups of four.
+    An owner compares this with `usepanel fingerprint` on the proxy's machine before confirming the key in the dashboard."""
+    import hashlib
+    h = hashlib.sha256(base64.b64decode(pubkey_b64, validate=True)).hexdigest()[:32].upper()
+    return " ".join(h[i:i + 4] for i in range(0, 32, 4))
+
+
 def receipt_id(receipt: dict) -> str:
     """Short citable id: "rcpt_" + the first 12 hex of the receipt's chain hash. Agents cite it; claims.py checks it against the ledger."""
     return "rcpt_" + core.receipt_hash(receipt)[:12]

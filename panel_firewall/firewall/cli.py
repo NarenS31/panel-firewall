@@ -25,6 +25,15 @@ def cmd_keygen(a):
     return 0
 
 
+def cmd_fingerprint(a):
+    """Print the fingerprint of this machine's receipt-signing key, to compare with the one Panel Cloud shows before an owner confirms it."""
+    from panel_firewall.firewall.receipts import Signer, fingerprint
+    s = Signer.load(a.key)
+    print(f"Receipt signing key: {s.path}\nFingerprint:         {fingerprint(s.pubkey)}\n"
+          "In Panel Cloud, confirm the key only if its fingerprint is exactly this one.")
+    return 0
+
+
 def cmd_pending(a):
     p = _ledger(a).pending()
     if not p:
@@ -226,6 +235,8 @@ def main(argv=None) -> int:
 
     p = sub.add_parser("keygen", help="create the Ed25519 receipt-signing key (outside the repo)")
     p.add_argument("--path"); p.add_argument("--force", action="store_true"); p.set_defaults(fn=cmd_keygen)
+    p = sub.add_parser("fingerprint", help="show the fingerprint of the receipt-signing key, to compare with Panel Cloud before confirming it")
+    p.add_argument("--key"); p.set_defaults(fn=cmd_fingerprint)
     p = sub.add_parser("pin", help="set or check the approval PIN (typed at the terminal only)")
     p.add_argument("action", choices=["set", "status"]); p.add_argument("--pin-file"); p.set_defaults(fn=cmd_pin)
     p = sub.add_parser("pending", help="list actions waiting for approval"); common(p); p.set_defaults(fn=cmd_pending)
