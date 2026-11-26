@@ -493,13 +493,157 @@ class CloudSync:
             self._thread.join(timeout=5)
 
 
-def read_api_key(a) -> str:
-    key = getattr(a, "api_key", None) or os.environ.get("PANEL_API_KEY")
+# ------------------------------------------------------------------------------------------------ saved cloud config (`usepanel init --token`)
+DEFAULT_CLOUD_URL = "https://app.usepanel.dev"
+_LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
+
+
+def config_dir() -> Path:
+    """Where `usepanel init --token` saves the cloud config: $PANEL_CONFIG_DIR, else $XDG_CONFIG_HOME/usepanel, else ~/.config/usepanel."""
+    if os.environ.get("PANEL_CONFIG_DIR"):
+        return Path(os.environ["PANEL_CONFIG_DIR"]).expanduser()
+    return Path(os.environ.get("XDG_CONFIG_HOME") or "~/.config").expanduser() / "usepanel"
+
+
+def config_path() -> Path:
+    return config_dir() / "cloud.json"
+
+
+def normalize_cloud_url(url: str) -> str:
+    """Strip trailing slashes and refuse anything but https:// (plain http:// only for localhost / 127.0.0.1)."""
+    url = (url or "").strip().rstrip("/")
+    try:
+        u = httpx.URL(url)
+    except Exception as e:
+        raise FirewallError(f"not a valid --cloud-url: {url!r}") from e
+    if u.scheme not in ("https", "http") or not u.host:
+        raise FirewallError(f"--cloud-url must look like https://app.usepanel.dev (got {url!r})")
+    if u.scheme == "http" and u.host not in _LOCAL_HOSTS:
+        raise FirewallError(f"refusing plain http:// for {u.host}: the API key would cross the network unencrypted. Use https:// "
+                            "(http:// is allowed only for localhost and 127.0.0.1)")
+    return url
+
+
+def load_saved_config() -> dict | None:
+    """The config `usepanel init --token` wrote, or None if there is none. A damaged file is an error, not a silent fallback."""
+    p = config_path()
+    try:
+        d = json.loads(p.read_text())
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError) as e:
+        raise FirewallError(f"cannot read the saved Panel Cloud config {p} ({type(e).__name__}); run the `usepanel init --token ...` "
+                            "command from the dashboard again, or delete the file") from e
+    if not isinstance(d, dict) or not all(isinstance(d.get(k), str) and d.get(k) for k in ("cloud_url", "api_key")):
+        raise FirewallError(f"the saved Panel Cloud config {p} is incomplete; run the `usepanel init --token ...` command from the dashboard again")
+    return d
+
+
+def save_config(cfg: dict) -> Path:
+    """Write the cloud config atomically: file mode 600, directory mode 700."""
+    p = config_path()
+    if not p.parent.exists():
+        p.parent.mkdir(parents=True, mode=0o700)
+    os.chmod(p.parent, 0o700)
+    _atomic_write(p, (json.dumps(cfg, indent=2) + "\n").encode())
+    return p
+
+
+def redeem_setup_token(cloud_url: str, token: str, machine: str, transport=None, timeout: float = 15.0) -> dict:
+    """Trade a one-time setup token (pit_..., single use, 10 minutes) for a workspace API key. No Authorization header is sent."""
+    try:
+        with httpx.Client(base_url=cloud_url, headers={"User-Agent": "usepanel-init"}, timeout=timeout, transport=transport,
+                          follow_redirects=False) as c:
+            r = c.post("/v1/proxy/init", json={"token": token, "machine": machine})
+    except httpx.HTTPError as e:
+        raise CloudError(f"could not reach Panel Cloud at {cloud_url} ({type(e).__name__}). Check the --cloud-url and your network, "
+                         "then run the command again; if it keeps failing, make a new setup command in the dashboard.") from e
+    try:
+        body = r.json()
+    except ValueError:
+        body = {}
+    body = body if isinstance(body, dict) else {}
+    if r.status_code == 404:
+        raise CloudError("this setup command is invalid, already used or expired (they work once, for 10 minutes). "
+                         "Make a new one in the Panel Cloud dashboard and run it again.")
+    if r.status_code == 429:
+        ra = body.get("retry_after")
+        wait = f"wait {int(ra)} seconds" if isinstance(ra, (int, float)) and not isinstance(ra, bool) and ra > 0 else "wait a minute"
+        raise CloudError(f"too many setup attempts; {wait} and run the command again.")
+    if r.status_code != 200:
+        msg = body.get("error") if isinstance(body.get("error"), str) else ""
+        msg = "".join(ch for ch in msg if ch.isprintable())[:200]
+        raise CloudError(f"Panel Cloud refused the setup (HTTP {r.status_code}){': ' + msg if msg else ''}. Check the --cloud-url, "
+                         "or make a new setup command in the dashboard.")
+    key, ws = body.get("api_key"), body.get("workspace")
+    if not (isinstance(key, str) and key.startswith("pcl_") and isinstance(ws, dict) and isinstance(ws.get("id"), str) and ws["id"]):
+        raise CloudError(f"unexpected reply from {cloud_url}/v1/proxy/init (no API key or workspace); is --cloud-url the Panel Cloud API?")
+    return {"api_key": key, "workspace_id": ws["id"], "workspace_name": ws.get("name") if isinstance(ws.get("name"), str) else "",
+            "key_id": body.get("key_id") if isinstance(body.get("key_id"), str) else ""}
+
+
+def _explicit_api_key(a) -> tuple[str | None, str]:
+    """--api-key / PANEL_API_KEY / --api-key-file, exactly as before the saved config existed (a manual override)."""
+    if getattr(a, "api_key", None):
+        return a.api_key, "--api-key"
+    if os.environ.get("PANEL_API_KEY"):
+        return os.environ["PANEL_API_KEY"], "PANEL_API_KEY"
     kf = getattr(a, "api_key_file", None)
-    if not key and kf:
-        key = Path(kf).expanduser().read_text().strip()
+    if kf:
+        try:
+            return Path(kf).expanduser().read_text().strip(), f"--api-key-file {kf}"
+        except OSError as e:
+            raise FirewallError(f"cannot read --api-key-file {kf} ({type(e).__name__})") from e
+    return None, ""
+
+
+def _same_url(x: str, y: str) -> bool:
+    return x.strip().rstrip("/").lower() == y.strip().rstrip("/").lower()
+
+
+def resolve_api_key(a, cloud_url: str | None = None) -> tuple[str | None, str]:
+    """(key, where it came from). Flags and PANEL_API_KEY win; then the saved config, but only for the cloud it was made for, so a key
+    is never sent to a different --cloud-url than the one that issued it."""
+    key, src = _explicit_api_key(a)
+    if src:                                   # an explicit choice is never silently replaced by the saved config
+        return key or None, src
+    saved = load_saved_config()
+    url = cloud_url or getattr(a, "cloud_url", None)
+    if saved and (not url or _same_url(saved["cloud_url"], url)):
+        return saved["api_key"], f"saved config {config_path()}"
+    return None, ""
+
+
+def apply_saved_cloud_url(a) -> dict | None:
+    """With no --cloud-url and no --policy, use the cloud saved by `usepanel init --token`. Returns the saved config if it was used."""
+    if getattr(a, "cloud_url", None) or getattr(a, "policy", None):
+        return None
+    saved = load_saved_config()
+    if saved:
+        a.cloud_url = saved["cloud_url"]
+    return saved
+
+
+def saved_config_mismatch(url: str | None) -> str:
+    """A note when the saved config exists but is for another cloud (its key is then not used), else ''."""
+    try:
+        saved = load_saved_config()
+    except FirewallError:
+        return ""
+    if saved and url and not _same_url(saved["cloud_url"], url):
+        return f" (the saved config from `usepanel init --token` is for {saved['cloud_url']}, not {url}, so its key is not used)"
+    return ""
+
+
+def _no_key_message(a) -> str:
+    return ("--cloud-url needs an API key: run the `usepanel init --token ...` command from the dashboard, or pass --api-key-file FILE "
+            "or set PANEL_API_KEY" + saved_config_mismatch(getattr(a, "cloud_url", None)))
+
+
+def read_api_key(a) -> str:
+    key, src = resolve_api_key(a)
     if not key:
-        raise FirewallError("--cloud-url needs an API key: --api-key, --api-key-file or the PANEL_API_KEY environment variable")
+        raise FirewallError(f"{src} is empty" if src else _no_key_message(a))
     if getattr(a, "api_key", None):
         log.warning("--api-key is visible in the process list; prefer --api-key-file or PANEL_API_KEY")
     return key

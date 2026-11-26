@@ -1,4 +1,7 @@
-"""`usepanel init -- <upstream cmd>`: ask an MCP server for tools/list, classify each tool by name/schema/annotations, and write a
+"""`usepanel init --token pit_... [--cloud-url URL]`: connect this machine to a Panel Cloud workspace with the one-time setup command
+the dashboard shows (the API key is fetched and saved, never typed or printed).
+
+`usepanel init -- <upstream cmd>`: ask an MCP server for tools/list, classify each tool by name/schema/annotations, and write a
 STARTER policy for a human to review. It is a heuristic: it errs toward blocking (unclassified and destructive tools are
 `allowed: false`; money-like tools get a cap of 0 until a human sets one; every write needs approval)."""
 from __future__ import annotations
@@ -6,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import socket
 import sys
 from pathlib import Path
 
@@ -115,10 +119,45 @@ async def _list_tools(cmd: list[str]) -> list[dict]:
         await up.stop()
 
 
+def run_cloud_init(a, transport=None) -> int:
+    from panel_firewall.firewall import cloud
+    token = (a.token or "").strip()
+    if not token.startswith("pit_"):
+        hint = " That looks like an API key, not a setup token." if token.startswith("pcl_") else ""
+        raise FirewallError("--token takes the one-time setup token from the dashboard (it starts with pit_)." + hint +
+                            " Copy the whole `usepanel init --token ...` command from Panel Cloud.")
+    url = cloud.normalize_cloud_url(a.cloud_url or cloud.DEFAULT_CLOUD_URL)
+    try:
+        previous = cloud.load_saved_config()
+    except FirewallError:
+        previous = None                                  # a damaged old file is simply replaced
+    got = cloud.redeem_setup_token(url, token, socket.gethostname(), transport=transport)
+    path = cloud.save_config({"cloud_url": url, "api_key": got["api_key"], "workspace_id": got["workspace_id"],
+                              "workspace_name": got["workspace_name"], "key_id": got["key_id"]})
+    ws = f'"{got["workspace_name"]}" ({got["workspace_id"]})' if got["workspace_name"] else got["workspace_id"]
+    lines = [f"Connected this machine to Panel Cloud workspace {ws} at {url}.",
+             f"Saved the workspace API key to {path} (readable only by you). The key is not shown."]
+    if previous and previous.get("workspace_id") != got["workspace_id"]:
+        lines.append(f"This replaced the previous setup for workspace {previous.get('workspace_name') or previous.get('workspace_id')}.")
+    from panel_firewall.firewall.receipts import DEFAULT_KEY
+    if not Path(DEFAULT_KEY).expanduser().is_file():
+        lines.append("First, once per machine: usepanel keygen")
+    lines += ["Next: usepanel proxy -- <your MCP server command>", "Check the setup any time with: usepanel doctor"]
+    print("\n".join(lines))
+    return 0
+
+
 def run_init(a) -> int:
     cmd = list(a.upstream)
     if cmd and cmd[0] == "--":
         cmd = cmd[1:]
+    if getattr(a, "token", None) is not None:
+        if cmd:
+            raise FirewallError("--token sets up Panel Cloud and takes no upstream command; to draft a local policy run "
+                                "`usepanel init --out policy.yaml -- <upstream command>` separately")
+        return run_cloud_init(a)
+    if getattr(a, "cloud_url", None):
+        raise FirewallError("--cloud-url goes with --token: copy the whole `usepanel init --token ...` command from the dashboard")
     if not cmd:
         raise FirewallError("usage: usepanel init [--out policy.yaml] -- <upstream command>")
     out = Path(a.out)

@@ -26,6 +26,18 @@ The support guard parses the bot's reply into promises and actions, checks them 
 
 ## Install and quickstart
 Requires Python 3.11+. `tenthlook-core` (the receipt format) is installed automatically.
+**With Panel Cloud (one command, no key to copy).** The dashboard shows a setup command with a one-time token (it works once, for 10 minutes). Paste it:
+```bash
+pip install panel-firewall
+usepanel keygen                            # once per machine: the receipt-signing key (outside any git repo, mode 0600)
+usepanel init --token pit_... --cloud-url https://app.usepanel.dev    # the command from the dashboard: fetches and saves the workspace API key
+usepanel proxy -- npx -y @modelcontextprotocol/server-filesystem /srv/data   # uses the saved cloud and key; point your MCP client at this command
+usepanel doctor                            # checks the setup and says where the key came from (never prints it)
+```
+The key is saved to `~/.config/usepanel/cloud.json` (`$XDG_CONFIG_HOME/usepanel/` if set, or `$PANEL_CONFIG_DIR`), mode 0600 in a 0700 directory, and is never printed. Running a new setup command replaces it.
+*Manual alternative:* create a key in the dashboard and pass `--cloud-url https://app.usepanel.dev --api-key-file key.txt`, or set `PANEL_API_KEY`. `--api-key`, `--api-key-file` and `PANEL_API_KEY` always override the saved key, and the saved key is only ever sent to the cloud URL it was issued for.
+
+**Local policy only (no cloud):**
 ```bash
 pip install panel-firewall
 usepanel keygen                            # Panel will not start without a signing key (stored outside any git repo, mode 0600)

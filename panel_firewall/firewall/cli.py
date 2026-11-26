@@ -227,8 +227,9 @@ def main(argv=None) -> int:
         p.add_argument("--ledger", help="ledger SQLite path (default: next to the policy)")
 
     def cloud_flags(p):
-        p.add_argument("--cloud-url", help="Panel Cloud API URL: take the signed policy from the cloud, report data-minimised events, accept cloud approvals")
-        p.add_argument("--api-key", help="workspace API key (visible in the process list; prefer --api-key-file or PANEL_API_KEY)")
+        p.add_argument("--cloud-url", help="Panel Cloud API URL: take the signed policy from the cloud, report data-minimised events, accept cloud approvals "
+                       "(default: the one saved by `usepanel init --token`, when no --policy is given)")
+        p.add_argument("--api-key", help="workspace API key, overrides the saved one (visible in the process list; prefer --api-key-file or PANEL_API_KEY)")
         p.add_argument("--api-key-file", help="file containing the workspace API key")
         p.add_argument("--cloud-pubkey", help="pin the cloud's Ed25519 policy-signing key (base64) instead of trusting the first one seen")
         p.add_argument("--cloud-state-dir", help="where the cached signed policy, pinned key and upload cursor live (default ~/.config/panel/cloud/<id>)")
@@ -264,7 +265,9 @@ def main(argv=None) -> int:
     p.set_defaults(fn=cmd_export_log)
     p = sub.add_parser("check-reply", help="would this agent reply be blocked as an unbacked 'it's done' claim?")
     common(p); p.add_argument("--conversation", default="default"); p.add_argument("--mode", choices=["receipts", "regex"], default="receipts"); p.add_argument("text"); p.set_defaults(fn=cmd_check_reply)
-    p = sub.add_parser("init", help="inspect an upstream MCP server and write a starter policy to review")
+    p = sub.add_parser("init", help="connect Panel Cloud (--token, from the dashboard), or inspect an upstream MCP server and write a starter policy to review")
+    p.add_argument("--token", help="one-time setup token from the Panel Cloud dashboard (pit_...): fetches and saves this workspace's API key")
+    p.add_argument("--cloud-url", help="Panel Cloud API URL for --token (default https://app.usepanel.dev)")
     p.add_argument("--out", default="panel-policy.yaml"); p.add_argument("--force", action="store_true")
     p.add_argument("upstream", nargs=argparse.REMAINDER, help="-- <upstream command>"); p.set_defaults(fn=cmd_init)
     p = sub.add_parser("proxy", help="wrap an existing MCP server: usepanel proxy --policy p.yaml -- <upstream cmd>")

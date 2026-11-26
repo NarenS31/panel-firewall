@@ -470,11 +470,14 @@ def _start_cloud(a, gw):
 
 
 def _prepare_cloud(a) -> None:
+    from panel_firewall.firewall.cloud import apply_saved_cloud_url
+    apply_saved_cloud_url(a)                        # no --cloud-url and no --policy: use the cloud saved by `usepanel init --token`
     if getattr(a, "cloud_url", None):
         from panel_firewall.firewall.cloud import bootstrap_cloud
         a._cloud = bootstrap_cloud(a)               # sets a.policy (the verified policy file) and a.ledger; refuses to start with no policy
     elif not getattr(a, "policy", None):
-        raise FirewallError("pass --policy FILE, or --cloud-url and --api-key to use a Panel Cloud policy")
+        raise FirewallError("pass --policy FILE, or connect Panel Cloud once with the `usepanel init --token ...` command from the dashboard "
+                            "(or --cloud-url with --api-key-file / PANEL_API_KEY)")
 
 
 def run_proxy(a) -> int:

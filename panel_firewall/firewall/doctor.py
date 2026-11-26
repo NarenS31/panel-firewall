@@ -1,14 +1,16 @@
 """`usepanel doctor`: check the things that stop a proxy from working and print the exact fix for each. Read-only: it changes nothing,
-sends no event, and prints no secret (the API key is shown only as its first 8 characters)."""
+sends no event, and prints no secret (the API key is shown only as its first 8 characters, with where it came from: a flag,
+PANEL_API_KEY, or the config saved by `usepanel init --token`)."""
 from __future__ import annotations
 
-import os
 import shutil
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
+
+from panel_firewall.firewall.types import FirewallError
 
 OK, WARN, FAIL = "ok", "warn", "fail"
 
@@ -19,17 +21,6 @@ class Check:
     name: str
     detail: str
     fix: str = ""
-
-
-def _api_key(a) -> str | None:
-    key = getattr(a, "api_key", None) or os.environ.get("PANEL_API_KEY")
-    kf = getattr(a, "api_key_file", None)
-    if not key and kf:
-        try:
-            key = Path(kf).expanduser().read_text().strip()
-        except OSError:
-            return None
-    return key or None
 
 
 def run_checks(a, transport=None) -> list[Check]:
@@ -64,23 +55,49 @@ def run_checks(a, transport=None) -> list[Check]:
         add(OK if found else FAIL, "Upstream command", f"{up[0]} " + ("found" if found else "not found on PATH"),
             "" if found else f"Install `{up[0]}` or give the full path after `--`.")
 
+    from panel_firewall.firewall.cloud import config_path, load_saved_config, resolve_api_key, saved_config_mismatch
+    init_fix = "Run the `usepanel init --token ...` command shown in the Panel Cloud dashboard again (it makes a new key)."
     url = getattr(a, "cloud_url", None)
+    saved = None
+    if not url and not getattr(a, "policy", None):
+        try:
+            saved = load_saved_config()
+        except FirewallError as e:
+            add(FAIL, "Saved Panel Cloud setup", str(e), init_fix)
+            return out
+        if saved:
+            url = saved["cloud_url"]
+            ws = saved.get("workspace_name") or saved.get("workspace_id") or "?"
+            add(OK, "Saved Panel Cloud setup", f"workspace {ws} at {url} ({config_path()})")
+            try:
+                mode = config_path().stat().st_mode & 0o777
+            except OSError:
+                mode = 0o600
+            if mode & 0o077:
+                add(WARN, "Saved config permissions", f"{config_path()} is mode {mode:o}: other users may read the API key",
+                    f"Run `chmod 600 {config_path()}`.")
     if not url:
         pol = getattr(a, "policy", None)
         if pol:
             add(OK if Path(pol).expanduser().is_file() else FAIL, "Local policy file", pol, "" if Path(pol).expanduser().is_file() else "Create one with `usepanel init --out policy.yaml -- <upstream command>`.")
         else:
-            add(WARN, "Policy", "no --policy and no --cloud-url given", "Pass `--policy policy.yaml`, or `--cloud-url https://app.usepanel.dev --api-key-file key.txt`.")
+            add(WARN, "Policy", "no --policy, no --cloud-url and no saved Panel Cloud setup",
+                "Run the `usepanel init --token ...` command from the Panel Cloud dashboard, or pass `--policy policy.yaml`.")
         return out
 
-    key = _api_key(a)
+    try:
+        key, src = resolve_api_key(a, url)
+    except FirewallError as e:
+        add(FAIL, "Panel Cloud API key", str(e), "Fix the path, or drop the flag to use the saved setup.")
+        return out
     if not key:
-        add(FAIL, "Panel Cloud API key", "none given", "Pass --api-key-file FILE (best), or set PANEL_API_KEY. Create a key in the dashboard under the workspace's API keys tab.")
+        add(FAIL, "Panel Cloud API key", (f"{src} is empty" if src else "none given") + saved_config_mismatch(url),
+            "Run the `usepanel init --token ...` command from the dashboard (best), or pass --api-key-file FILE, or set PANEL_API_KEY.")
         return out
     if not key.startswith("pcl_"):
-        add(FAIL, "Panel Cloud API key", f"{key[:4]}… does not look like a Panel key (they start with pcl_)", "Copy the key again from the dashboard; it is shown only once, so create a new one if it is lost.")
+        add(FAIL, "Panel Cloud API key", f"{key[:4]}… from {src} does not look like a Panel key (they start with pcl_)", "Copy the key again from the dashboard; it is shown only once, so create a new one if it is lost.")
         return out
-    add(OK, "Panel Cloud API key", f"{key[:8]}… (looks right)")
+    add(OK, "Panel Cloud API key", f"{key[:8]}… from {src} (looks right)")
 
     try:
         with httpx.Client(base_url=url.rstrip("/"), headers={"Authorization": f"Bearer {key}"}, timeout=8, transport=transport, follow_redirects=False) as c:
@@ -89,7 +106,8 @@ def run_checks(a, transport=None) -> list[Check]:
         add(FAIL, "Panel Cloud reachable", f"{url}: {type(e).__name__}", "Check the URL and your network. Enforcement keeps working offline from the last cached signed policy, and actions that need approval stay held.")
         return out
     if r.status_code in (401, 403):
-        add(FAIL, "Panel Cloud API key accepted", f"rejected (HTTP {r.status_code})", "The key is wrong or was revoked. Create a new key in the dashboard.")
+        add(FAIL, "Panel Cloud API key accepted", f"rejected (HTTP {r.status_code})", "The key is wrong or was revoked. " +
+            (init_fix if src.startswith("saved config") else "Create a new key in the dashboard."))
         return out
     if r.status_code >= 400:
         add(FAIL, "Panel Cloud reachable", f"HTTP {r.status_code}", "Check the --cloud-url. It should be the API origin, for example https://app.usepanel.dev.")
