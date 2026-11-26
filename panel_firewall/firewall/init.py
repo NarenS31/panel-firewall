@@ -119,19 +119,13 @@ async def _list_tools(cmd: list[str]) -> list[dict]:
         await up.stop()
 
 
-def run_cloud_init(a, transport=None) -> int:
+def _finish_cloud_init(url: str, got: dict) -> int:
+    """Save the key the cloud handed back and say what happened. Shared by `--token` and `--cloud`."""
     from panel_firewall.firewall import cloud
-    token = (a.token or "").strip()
-    if not token.startswith("pit_"):
-        hint = " That looks like an API key, not a setup token." if token.startswith("pcl_") else ""
-        raise FirewallError("--token takes the one-time setup token from the dashboard (it starts with pit_)." + hint +
-                            " Copy the whole `usepanel init --token ...` command from Panel Cloud.")
-    url = cloud.normalize_cloud_url(a.cloud_url or cloud.DEFAULT_CLOUD_URL)
     try:
         previous = cloud.load_saved_config()
     except FirewallError:
         previous = None                                  # a damaged old file is simply replaced
-    got = cloud.redeem_setup_token(url, token, socket.gethostname(), transport=transport)
     path = cloud.save_config({"cloud_url": url, "api_key": got["api_key"], "workspace_id": got["workspace_id"],
                               "workspace_name": got["workspace_name"], "key_id": got["key_id"]})
     ws = f'"{got["workspace_name"]}" ({got["workspace_id"]})' if got["workspace_name"] else got["workspace_id"]
@@ -147,17 +141,45 @@ def run_cloud_init(a, transport=None) -> int:
     return 0
 
 
+def run_cloud_init(a, transport=None) -> int:
+    from panel_firewall.firewall import cloud
+    token = (a.token or "").strip()
+    if not token.startswith("pit_"):
+        hint = " That looks like an API key, not a setup token." if token.startswith("pcl_") else ""
+        raise FirewallError("--token takes the one-time setup token from the dashboard (it starts with pit_)." + hint +
+                            " Copy the whole `usepanel init --token ...` command from Panel Cloud.")
+    url = cloud.normalize_cloud_url(a.cloud_url or cloud.DEFAULT_CLOUD_URL)
+    got = cloud.redeem_setup_token(url, token, socket.gethostname(), transport=transport)
+    return _finish_cloud_init(url, got)
+
+
+def run_cloud_browser_init(a, transport=None, open_url=None, sleep=None) -> int:
+    """`usepanel init --cloud`: authorise this machine in the browser; the key goes straight into the saved config."""
+    from panel_firewall.firewall import cloud
+    url = cloud.normalize_cloud_url(a.cloud_url or cloud.DEFAULT_CLOUD_URL)
+    kw = {"sleep": sleep} if sleep else {}
+    got = cloud.browser_authorize(url, socket.gethostname(), transport=transport, open_url=open_url, **kw)
+    return _finish_cloud_init(url, got)
+
+
 def run_init(a) -> int:
     cmd = list(a.upstream)
     if cmd and cmd[0] == "--":
         cmd = cmd[1:]
+    if getattr(a, "cloud", False):
+        if getattr(a, "token", None) is not None:
+            raise FirewallError("use either --cloud (authorise in the browser) or --token (the command from the dashboard), not both")
+        if cmd:
+            raise FirewallError("--cloud sets up Panel Cloud and takes no upstream command; to draft a local policy run "
+                                "`usepanel init --out policy.yaml -- <upstream command>` separately")
+        return run_cloud_browser_init(a)
     if getattr(a, "token", None) is not None:
         if cmd:
             raise FirewallError("--token sets up Panel Cloud and takes no upstream command; to draft a local policy run "
                                 "`usepanel init --out policy.yaml -- <upstream command>` separately")
         return run_cloud_init(a)
     if getattr(a, "cloud_url", None):
-        raise FirewallError("--cloud-url goes with --token: copy the whole `usepanel init --token ...` command from the dashboard")
+        raise FirewallError("--cloud-url goes with --cloud (authorise in the browser) or --token (copy the whole `usepanel init --token ...` command from the dashboard)")
     if not cmd:
         raise FirewallError("usage: usepanel init [--out policy.yaml] -- <upstream command>")
     out = Path(a.out)

@@ -16,12 +16,15 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import secrets
 import json
 import logging
 import os
 import tempfile
 import threading
 import time
+import webbrowser
+from urllib.parse import urlencode
 from pathlib import Path
 
 import httpx
@@ -604,6 +607,67 @@ def redeem_setup_token(cloud_url: str, token: str, machine: str, transport=None,
         raise CloudError(f"unexpected reply from {cloud_url}/v1/proxy/init (no API key or workspace); is --cloud-url the Panel Cloud API?")
     return {"api_key": key, "workspace_id": ws["id"], "workspace_name": ws.get("name") if isinstance(ws.get("name"), str) else "",
             "key_id": body.get("key_id") if isinstance(body.get("key_id"), str) else ""}
+
+
+def browser_authorize(cloud_url: str, machine: str, transport=None, open_url=None, say=print, sleep=time.sleep, clock=time.monotonic,
+                      timeout: float = 600.0, interval: float = 2.0) -> dict:
+    """`usepanel init --cloud`: authorise this machine in the browser and collect a workspace API key. Nothing is copied or pasted.
+
+    Opens {cloud_url}/authorize with a random request id and the SHA-256 of a secret verifier that never leaves this process, then polls
+    POST /v1/proxy/cli-auth with the verifier until the person presses Authorize (the Worker mints the key for the first correct poll only,
+    so the URL alone is useless to anyone who sees it). The short code printed here must match the one on the page: that is what stops
+    someone else's authorize link from being approved by mistake. Returns the same dict as redeem_setup_token."""
+    nonce, verifier = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
+    challenge = hashlib.sha256(verifier.encode()).hexdigest()
+    code = f"{challenge[:4]}-{challenge[4:8]}".upper()
+    url = f"{cloud_url}/authorize?" + urlencode({"cli": nonce, "c": challenge, "m": machine})
+    try:
+        opened = bool((open_url or webbrowser.open)(url))
+    except Exception:                                                  # no browser, no display, a locked-down box
+        opened = False
+    say(f"Opening your browser to authorise this machine ({machine}).")
+    if not opened:
+        say(f"Could not open a browser. Open this link yourself:\n  {url}")
+    say(f"Check that the page shows the code {code}, then press Authorize. Waiting for you (up to {int(timeout // 60)} minutes)...")
+    deadline, failures = clock() + timeout, 0
+    try:
+        with httpx.Client(base_url=cloud_url, headers={"User-Agent": "usepanel-init"}, timeout=15.0, transport=transport, follow_redirects=False) as c:
+            while clock() < deadline:
+                try:
+                    r = c.post("/v1/proxy/cli-auth", json={"nonce": nonce, "verifier": verifier})
+                    failures = 0
+                except httpx.HTTPError as e:
+                    failures += 1
+                    if failures >= 5:
+                        raise CloudError(f"could not reach Panel Cloud at {cloud_url} ({type(e).__name__}). Check the --cloud-url and your network, "
+                                         "then run `usepanel init --cloud` again.") from e
+                    sleep(interval)
+                    continue
+                try:
+                    body = r.json()
+                except ValueError:
+                    body = {}
+                body = body if isinstance(body, dict) else {}
+                if r.status_code == 202:
+                    sleep(interval)
+                    continue
+                if r.status_code == 429:
+                    ra = body.get("retry_after")
+                    sleep(min(float(ra), 30.0) if isinstance(ra, (int, float)) and not isinstance(ra, bool) and ra > 0 else 10.0)
+                    continue
+                if r.status_code == 404:
+                    raise CloudError("this authorisation is invalid, already used or expired. Run `usepanel init --cloud` again.")
+                if r.status_code != 200:
+                    msg = "".join(ch for ch in str(body.get("error") or "") if ch.isprintable())[:200]
+                    raise CloudError(f"Panel Cloud refused the authorisation (HTTP {r.status_code}){': ' + msg if msg else ''}. Check the --cloud-url.")
+                key, ws = body.get("api_key"), body.get("workspace")
+                if not (isinstance(key, str) and key.startswith("pcl_") and isinstance(ws, dict) and isinstance(ws.get("id"), str) and ws["id"]):
+                    raise CloudError(f"unexpected reply from {cloud_url}/v1/proxy/cli-auth (no API key or workspace); is --cloud-url the Panel Cloud API?")
+                return {"api_key": key, "workspace_id": ws["id"], "workspace_name": ws.get("name") if isinstance(ws.get("name"), str) else "",
+                        "key_id": body.get("key_id") if isinstance(body.get("key_id"), str) else ""}
+    except httpx.HTTPError as e:                                       # a failure while building the client
+        raise CloudError(f"could not reach Panel Cloud at {cloud_url} ({type(e).__name__}).") from e
+    raise CloudError(f"timed out after {int(timeout // 60)} minutes without an authorisation. Run `usepanel init --cloud` again when you are ready.")
 
 
 def _explicit_api_key(a) -> tuple[str | None, str]:
