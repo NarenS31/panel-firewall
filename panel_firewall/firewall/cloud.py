@@ -258,6 +258,25 @@ def receipt_event(ledger_id: str, seq: int, receipt: dict, detail: dict, policy:
     return out
 
 
+_CONSENT_OUTCOME = {"pending": "held", "approved": "approved", "denied": "denied"}
+
+
+def consent_event(ledger_id: str, ev: dict, policy: Policy | None) -> dict:
+    """The cloud record for a consent step: the action was HELD, then APPROVED or DENIED. Same minimisation as a receipt event: only the
+    tool, a verdict, a plain sentence, the action hash and (for a hold) the rule that fired. Never the arguments, who approved, or a reason."""
+    from panel_firewall.firewall.summary import rule_of, summarize
+    d = ev["data"]
+    outcome = _CONSENT_OUTCOME[ev["event"]]
+    reasons = [r for r in (d.get("reasons") or []) if isinstance(r, str)]
+    out = {"id": f"{ledger_id}-{ev['seq']}", "ts": float(ev["ts"]), "tool": ev["tool"], "verdict": "needs_consent", "outcome": outcome, "mode": "enforce",
+           "summary": summarize(ev["tool"], {"held": "pending"}.get(outcome, outcome), {"reasons": reasons}), "action_sha256": d["action_sha"]}
+    if policy is not None:
+        out["policy_sha256"] = policy.sha256
+    if outcome == "held" and reasons:
+        out["rule"] = rule_of(reasons[0])
+    return out
+
+
 _HINTS = ("readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint")
 
 
@@ -337,19 +356,23 @@ class CloudSync:
     def upload_events(self, batch: int = 100) -> int:
         cur = self.state.cursor()
         led, sent = self.fw.ledger, 0
-        evs = [e for e in led.events(since_seq=cur["seq"], limit=1000) if e["event"] == "receipt" and "receipt" in e["data"]]
-        last = cur["seq"]
         all_seq = led.events(since_seq=cur["seq"], limit=1000)
-        if all_seq:
-            last = all_seq[-1]["seq"]
-        recs = [receipt_event(cur["ledger_id"], e["seq"], e["data"]["receipt"], e["data"]["detail"], self.fw.policy) for e in evs]
+        last = all_seq[-1]["seq"] if all_seq else cur["seq"]
+        # receipts (executed / blocked / shadow) AND the consent lifecycle (held / approved / denied), in ledger order, through one path
+        items: list[tuple[int, dict]] = []
+        for e in all_seq:
+            if e["event"] == "receipt" and "receipt" in e["data"]:
+                items.append((e["seq"], receipt_event(cur["ledger_id"], e["seq"], e["data"]["receipt"], e["data"]["detail"], self.fw.policy)))
+            elif e["event"] in _CONSENT_OUTCOME:
+                items.append((e["seq"], consent_event(cur["ledger_id"], e, self.fw.policy)))
+        recs = [r for _s, r in items]
         for i in range(0, len(recs), batch):
             try:
                 self.client.events(recs[i:i + batch])
             except CloudError as e:
                 self._offline(e)
                 if i:   # advance only past what was accepted
-                    self.state.set_seq(evs[i - 1]["seq"])
+                    self.state.set_seq(items[i - 1][0])
                 return sent
             sent += len(recs[i:i + batch])
         if all_seq and last > cur["seq"]:
