@@ -157,12 +157,19 @@ def analyze(sql: str, settings: dict | None = None, count_rows=None) -> SqlAnaly
     return out
 
 
+class RowCountUnavailable(Exception):
+    """Row counting is impossible for a reason the user can fix; the message is shown to them verbatim."""
+
+
 def _count(count_rows, q: str, out: SqlAnalysis) -> int | None:
     if count_rows is None:
         out.block.append("no database is configured to count the affected rows")
         return None
     try:
         return int(count_rows(q))
+    except RowCountUnavailable as e:
+        out.block.append(str(e))
+        return None
     except Exception as e:
         out.block.append(f"could not count the affected rows ({type(e).__name__}); blocked for safety")
         return None

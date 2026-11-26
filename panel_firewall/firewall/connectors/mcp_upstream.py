@@ -59,9 +59,14 @@ class McpUpstreamConnector(Connector):
     def _db_count(self, q: str) -> int:
         db = self.policy.raw.get("database")
         if not db:
-            raise RuntimeError("no `database:` in the policy to count rows on")
+            raise sqlguard.RowCountUnavailable("Set database: in your policy to enable row counting for SQL writes. Without it, all SQL writes are blocked.")
         base = Path(self.policy.path).resolve().parent if self.policy.path else Path.cwd()
-        con = sqlite3.connect(f"file:{(base / db).resolve()}?mode=ro", uri=True)
+        path = (base / db).resolve()
+        try:
+            con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+            con.execute("SELECT 1 FROM sqlite_master LIMIT 1").fetchall()
+        except sqlite3.Error as e:
+            raise sqlguard.RowCountUnavailable(f"Cannot count rows: the database: path in your policy ({path}) cannot be opened or read ({e}). Check the path and permissions; until then all SQL writes are blocked.") from e
         try:
             return con.execute(q).fetchone()[0]
         finally:

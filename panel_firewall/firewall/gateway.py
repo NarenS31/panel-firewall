@@ -22,7 +22,7 @@ from concurrent.futures import ThreadPoolExecutor
 from panel_firewall.firewall.config import build_firewall, native_connectors
 from panel_firewall.firewall.connectors.mcp_upstream import McpUpstreamConnector
 from panel_firewall.firewall.engine import Firewall, Outcome
-from panel_firewall.firewall.types import Action, FirewallError
+from panel_firewall.firewall.types import Action, FirewallError, UpstreamError
 
 log = logging.getLogger("panel.gateway")
 LIMIT = 32 * 1024 * 1024
@@ -109,8 +109,13 @@ class McpUpstream:
         self.closed = asyncio.Event()
 
     async def start(self):
-        self.proc = await asyncio.create_subprocess_exec(*self.command, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
-                                                         stderr=None, limit=LIMIT, env={**os.environ, **(self.env or {})})
+        try:
+            self.proc = await asyncio.create_subprocess_exec(*self.command, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
+                                                             stderr=None, limit=LIMIT, env={**os.environ, **(self.env or {})})
+        except FileNotFoundError as e:
+            raise UpstreamError(f"Error: command not found at {self.command[0] if self.command else e.filename}") from e
+        except PermissionError as e:
+            raise UpstreamError(f"Error: cannot run {self.command[0]} (permission denied)") from e
         self._task = asyncio.create_task(self._reader())
 
     async def _reader(self):

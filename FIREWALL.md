@@ -72,6 +72,8 @@ that have a shell under a separate OS user or sandbox, or approve from another d
 See `examples/` and the docstring at the top of `panel_firewall/firewall/policy.py` (rule keys: `allowed`, `risk`, `required_fields`,
 `amount_field`, `max_amount`, `consent_over_amount`, `max_rows`, `consent_over_rows`, `protected`, `consent_if`, `block_if`,
 `rate_limit`, `max_total_amount`, `duplicate_guard`, `sql_arg`, `path_args`, `allowed_roots`). Typos in rule keys are errors, not silent no-ops.
+
+> **SQL limit:** the guard blocks `UPDATE`/`DELETE` with no `WHERE` or a constant-true one (`WHERE 1=1`), but it does not detect a tautology mixed with a column (`WHERE id=1 OR 1=1`). The row count is what stops it, so give every SQL tool that can write a `max_rows` or `consent_over_rows` (or `consent_sql_kinds`). See KNOWN_ISSUES.md.
 Unlisted tools are blocked. Modes: `dry_run` (nothing executes), `approval` (every non-read action needs a human), `auto`, `shadow` (log only, nothing enforced).
 
 ### Per-order duplicate guard

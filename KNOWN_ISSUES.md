@@ -3,6 +3,21 @@
 Logged for a future version. Nothing here is fixed in the current code: each was found after a pre-registered run,
 and changing the blocker now would change the version those results describe.
 
+## SQL guard: tautologies other than a bare constant are not detected (known limitation)
+
+The SQL guard refuses `UPDATE`/`DELETE` with no `WHERE`, and with a `WHERE` that is a pure constant (`WHERE 1`, `WHERE 1=1`, `WHERE TRUE`).
+It does not reason about conditions that are always true because of how they combine with a column: `DELETE FROM orders WHERE id=1 OR 1=1`
+parses as a filtered delete and is allowed by itself.
+
+- **What catches it:** the row count. Panel counts the rows the `WHERE` would touch before running the statement, so
+  `max_rows` (block above N) or `consent_over_rows` (ask a person above N) stops it as soon as it touches more than N rows. The starter
+  policy from `usepanel init` sets `max_rows: 10` and `consent_sql_kinds: [delete]`, so a generated policy is covered.
+- **When it is not covered:** a policy that lists a SQL tool with no `max_rows`, no `consent_over_rows` and no `consent_sql_kinds`. There, the
+  statement above deletes every row. Set at least one of those three on every SQL tool that can write.
+- **Not planned for a fix:** deciding whether an arbitrary boolean expression is a tautology is not something the guard attempts; the row
+  count is the control, by design.
+- **Pinned by:** `test_deep_panel.py` ("documented limitation: `WHERE id=1 OR 1=1` ...").
+
 ## Claim blocker v2: 5 remaining defects (for v3)
 
 The claim blocker (`panel_firewall/firewall/claims.py`, `usepanel check-reply`, receipts mode) decides whether a reply asserts that

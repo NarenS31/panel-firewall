@@ -8,7 +8,7 @@ import sys
 import time
 from pathlib import Path
 
-from panel_firewall.firewall.types import FirewallError
+from panel_firewall.firewall.types import FirewallError, UpstreamError
 
 
 def _ledger(a):
@@ -294,6 +294,9 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     try:
         return a.fn(a)
+    except UpstreamError as e:
+        print(str(e), file=sys.stderr)
+        return 1
     except FirewallError as e:
         print(f"panel: {e}", file=sys.stderr)
         return 2

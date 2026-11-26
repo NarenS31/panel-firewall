@@ -26,7 +26,12 @@ class SqliteConnector(Connector):
 
     # ---------------------------------------------------------------- validation
     def _ro(self) -> sqlite3.Connection:
-        return sqlite3.connect(f"file:{self.db_path}?mode=ro", uri=True)
+        try:
+            con = sqlite3.connect(f"file:{self.db_path}?mode=ro", uri=True)
+            con.execute("SELECT 1 FROM sqlite_master LIMIT 1").fetchall()
+            return con
+        except sqlite3.Error as e:
+            raise sqlguard.RowCountUnavailable(f"Cannot count rows: the database ({self.db_path}) cannot be opened or read ({e}). Check the path and permissions; until then SQL writes are blocked.") from e
 
     def _count(self, q: str) -> int:
         con = self._ro()

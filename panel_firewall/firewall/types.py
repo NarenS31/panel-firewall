@@ -12,6 +12,10 @@ ENFORCE_MODES = ("approval", "auto")      # what `shadow` evaluates against (pol
 RISKS = ("read", "write", "destructive")
 
 
+class UpstreamError(Exception):
+    """The upstream MCP server could not be started (command missing or not executable). Shown as one line, exit status 1."""
+
+
 class FirewallError(Exception):
     """Raised for configuration problems (never for a tool call: a bad call becomes a block verdict)."""
 
