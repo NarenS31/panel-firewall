@@ -166,7 +166,23 @@ class Firewall:
             return self._blocked(action, key, ["idempotency key was already used for a different action"])
         conn_early = self.connector_for(action.tool)
         is_read = conn_early is not None and self._risk(action.tool, conn_early) == "read"
-        prior = None if is_read else led.prior_execution(key)   # reads are never replayed: their answer changes
+        # A tool with `sql_arg` is one tool (one declared risk) covering every statement it's handed. Its *declared*
+        # risk ("write", typically, since the policy can't know in advance what the agent will send) is right for
+        # consent/approval decisions, which must stay conservative. But it is NOT right for caching: a SELECT's
+        # answer changes over time and must never be served stale, and a DDL statement that somehow gets past the
+        # SQL guard (it shouldn't) must never be reported as "already executed" when the real state may differ from
+        # whatever the cache remembers. So, independent of declared risk, never cache or replay SELECT or any
+        # non-DML statement kind (DROP/ALTER/TRUNCATE/CREATE/PRAGMA/ATTACH/DETACH/an unparsed Command) under this key.
+        # INSERT/UPDATE/DELETE keep the normal run-once guarantee below.
+        cache_exempt = False
+        if conn_early is not None and not is_read and (self.policy.rule_for(action.tool) or {}).get("sql_arg"):
+            try:
+                sql_kind = conn_early.facts(action, self.policy).get("sql_kind")
+            except Exception:
+                sql_kind = None
+            cache_exempt = sql_kind is not None and sql_kind not in ("insert", "update", "delete")
+        skip_cache = is_read or cache_exempt
+        prior = None if skip_cache else led.prior_execution(key)   # reads, and any non-DML statement, are never replayed
         if prior is not None:  # a repeat of something already done: replay, never run again
             res = Result(True, prior.get("result_id"), prior.get("output"))
             return Outcome("replayed", Verdict(ALLOW, ["already executed; returning the recorded result"]), res,
@@ -183,7 +199,7 @@ class Firewall:
         led.append(key, action.conversation_id, action.tool, "requested",
                    {"action_sha": sha, "args": action.args, "verdict": v.to_dict(), "mode": self.mode})
         if self.mode == "shadow":
-            return self._shadow(action, key, sha, conn, v)
+            return self._shadow(action, key, sha, conn, v, skip_cache)
         if v.decision == BLOCK:
             return self._blocked(action, key, v.reasons)
         if self.mode == "dry_run":
@@ -209,11 +225,15 @@ class Firewall:
                         return self._blocked(action, key, ["a human denied this action"], trip=False)
                     return Outcome("needs_consent", v, approval_id=aid, idempotency_key=key)
             approver = ap.get("who")
-        if self._risk(action.tool, conn) == "read":
+        if self._risk(action.tool, conn) == "read" or skip_cache:
+            # `_execute_read` never calls `led.claim()`: it runs every time and is never locked into the
+            # run-once idempotency index. Right for a true read; also right here for `skip_cache` (a SELECT
+            # under a risk:write SQL tool, or a non-DML statement that reached this point) so it is never
+            # permanently remembered as "executed" and replayed with stale output later.
             return self._execute_read(action, key, sha, conn, v)
         return self._execute(action, key, sha, conn, v, approver)
 
-    def _shadow(self, action: Action, key: str, sha: str, conn: Connector, v: Verdict) -> Outcome:
+    def _shadow(self, action: Action, key: str, sha: str, conn: Connector, v: Verdict, skip_cache: bool = False) -> Outcome:
         """Shadow mode: record what enforcement WOULD have done, then let the action run. Receipts say mode=shadow and carry the
         would-be verdict. Nothing here ever changes the mode: enforcing is a human editing the policy / dropping `--shadow`."""
         risk = self._risk(action.tool, conn)
@@ -234,7 +254,7 @@ class Firewall:
                                 "mode": "shadow"})
             log.warning("[shadow] would have %s %s: %s", "blocked" if would == "block" else "asked about", action.tool, "; ".join(reasons))
         agent_v = Verdict(ALLOW, ["shadow mode: not enforced"])
-        if risk == "read":
+        if risk == "read" or skip_cache:
             o = self._execute_read(action, key, sha, conn, agent_v, rv, extra)
         else:
             o = self._execute(action, key, sha, conn, agent_v, None, rv, extra)
