@@ -89,6 +89,7 @@ def serve(executor, port: int = 8790) -> ThreadingHTTPServer:
 
 def main() -> None:
     import argparse
+
     from panel_firewall.execute.wiring import build_executor
     ap = argparse.ArgumentParser(description="Panel approval page (localhost only)")
     ap.add_argument("--db", default="panel_actions.sqlite")

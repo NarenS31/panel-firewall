@@ -4,6 +4,7 @@ import tempfile
 from pathlib import Path
 
 import yaml
+from tenthlook_core import crypto as _core_crypto
 
 from panel_firewall.firewall.connector import Connector
 from panel_firewall.firewall.engine import Firewall
@@ -11,8 +12,6 @@ from panel_firewall.firewall.ledger import Ledger
 from panel_firewall.firewall.policy import parse_policy
 from panel_firewall.firewall.receipts import Signer, generate_key
 from panel_firewall.firewall.types import Action, ActionSchema, Result
-
-from tenthlook_core import crypto as _core_crypto  # noqa: E402
 
 # The two "keygen refuses a path inside the repo" tests need the code to live in a git checkout; they skip cleanly from an sdist or any copy without .git.
 IN_GIT_CHECKOUT = _core_crypto.inside_git_worktree(Path(__file__).resolve().parent)
@@ -148,7 +147,6 @@ def text_of(resp) -> str:
 
 
 def write_policy(tmp_path, actions, **top):
-    import yaml
     pol = tmp_path / "policy.yaml"
     pol.write_text(yaml.safe_dump({"version": "gw1", "mode": "auto", "actions": actions, **top}))
     return pol

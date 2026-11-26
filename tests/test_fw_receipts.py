@@ -42,14 +42,13 @@ def test_one_receipt_per_outcome_and_all_verify_from_the_ledger():
 import sqlite3
 
 import pytest
-from tenthlook_core import store as core_store
 
 from panel_firewall.firewall.ledger import Ledger
 from panel_firewall.firewall.receipts import GENESIS, receipt_hash, verify_chain
 
 
 def _file_ledger_fw(tmp_path):
-    from tests.fw_helpers import FakeConnector, make_fw
+    from tests.fw_helpers import make_fw
     fw = make_fw()
     fw.ledger = Ledger(tmp_path / "l.db")
     return fw
@@ -131,8 +130,9 @@ def test_ledger_still_refuses_sql_edits_and_deletes(tmp_path):
 
 
 def test_cli_verify_chain_and_tenthlook_cli_accept_panels_output(tmp_path, capsys):
-    from panel_firewall.firewall.cli import main
     from tenthlook_core.cli import main as tl
+
+    from panel_firewall.firewall.cli import main
     fw = _run(_file_ledger_fw(tmp_path))
     pub = pubkey_path()
     led = str(tmp_path / "l.db")

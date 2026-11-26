@@ -4,9 +4,15 @@ import json
 
 import httpx
 
-from panel_firewall.firewall.cloud import CloudClient, CloudSync, CloudState, PolicyManager, minimise_tools
+from panel_firewall.firewall.cloud import (
+    CloudClient,
+    CloudState,
+    CloudSync,
+    PolicyManager,
+    minimise_tools,
+)
 from panel_firewall.firewall.doctor import FAIL, OK, WARN, render, run_checks
-from tests.test_fw_cloud import FakeCloud, make_fw  # noqa: F401  (fixtures below reuse the same fake)
+from tests.test_fw_cloud import FakeCloud, make_fw
 
 KEY = "pcl_" + "k" * 30
 

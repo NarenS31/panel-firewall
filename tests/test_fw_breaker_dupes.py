@@ -6,7 +6,7 @@ from panel_firewall.firewall.ledger import Ledger
 from panel_firewall.firewall.pin import ApprovalGate, PinStore
 from panel_firewall.firewall.policy import LedgerState, evaluate, parse_policy
 from panel_firewall.firewall.types import Action, FirewallError
-from tests.fw_helpers import FakeConnector, POLICY_SHA, act, make_fw, policy, signer
+from tests.fw_helpers import POLICY_SHA, FakeConnector, act, make_fw, signer
 
 DAY = 86400.0
 

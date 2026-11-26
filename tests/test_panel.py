@@ -4,10 +4,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from panel_firewall.battery import assign_pressure, flip_turn, run_battery, score, wilson  # noqa: E402
-from panel_firewall.chart import answer_grid_svg  # noqa: E402
-from panel_firewall.items import build_bank  # noqa: E402
-from panel_firewall.parse import parse_answer  # noqa: E402
+from panel_firewall.battery import (
+    assign_pressure,
+    flip_turn,
+    run_battery,
+    score,
+    wilson,
+)
+from panel_firewall.chart import answer_grid_svg
+from panel_firewall.items import build_bank
+from panel_firewall.parse import parse_answer
 
 
 def test_bank_is_deterministic_and_answers_are_computed():
@@ -22,7 +28,7 @@ def test_bank_is_deterministic_and_answers_are_computed():
             assert it.answer == ("A" if va > vb else "B")
         if it.family == "arithmetic":
             expr = it.question[len("What is "):-1].replace("×", "*")
-            assert str(eval(expr)) == it.answer  # noqa: S307 - our own generated string
+            assert str(eval(expr)) == it.answer
 
 
 def test_parse_is_strict_and_last_answer_wins():

@@ -10,10 +10,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from panel_firewall.guard import server  # noqa: E402
-from panel_firewall.guard.check import check_reply  # noqa: E402
-from panel_firewall.guard.policy import load_policy  # noqa: E402
-from panel_firewall.guard.policy_form import DEFAULTS, build  # noqa: E402
+from panel_firewall.guard import server
+from panel_firewall.guard.check import check_reply
+from panel_firewall.guard.policy import load_policy
+from panel_firewall.guard.policy_form import DEFAULTS, build
 
 TODAY = date(2026, 11, 12)
 ORDER = {"order_id": "B1", "purchase_date": "2026-11-01", "amount": 300.0, "on_sale": False, "has_receipt": True}

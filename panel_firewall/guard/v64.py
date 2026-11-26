@@ -32,7 +32,12 @@ from panel_firewall.guard.policy import Policy
 from panel_firewall.guard.v5 import REFUSALS, _norm, render, sentences
 from panel_firewall.guard.v61 import phantom_issue
 from panel_firewall.guard.v62 import STATUS, status
-from panel_firewall.guard.v63 import OFFERS, evaluate_v63, instructions_v63, offer_allowed
+from panel_firewall.guard.v63 import (
+    OFFERS,
+    evaluate_v63,
+    instructions_v63,
+    offer_allowed,
+)
 
 V64_VERSION = "guard-v6.4-proxy"
 UNAPPROVED_PREFIX = "This sentence is about a policy topic but is not an approved sentence"
@@ -122,4 +127,4 @@ def evaluate_v64(raw: str, policy: Policy, order: dict | None, today: date, done
             "phantom_exempt": exempt}
 
 
-__all__ = ["V64_VERSION", "explanations", "approved_v64", "instructions_v64", "evaluate_v64", "offer_allowed", "STATUS"]
+__all__ = ["STATUS", "V64_VERSION", "approved_v64", "evaluate_v64", "explanations", "instructions_v64", "offer_allowed"]

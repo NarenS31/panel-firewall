@@ -2,7 +2,13 @@
 import pytest
 
 from panel_firewall.firewall.policy import LedgerState, evaluate, parse_policy
-from panel_firewall.firewall.types import ALLOW, BLOCK, NEEDS_CONSENT, Action, FirewallError
+from panel_firewall.firewall.types import (
+    ALLOW,
+    BLOCK,
+    NEEDS_CONSENT,
+    Action,
+    FirewallError,
+)
 
 R = {"max_amount": 100, "consent_over_amount": 50}
 

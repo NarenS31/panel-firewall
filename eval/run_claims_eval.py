@@ -14,16 +14,16 @@ import httpx
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from tenthlook_core import receipt as core  # noqa: E402
+from tenthlook_core import receipt as core
 
-from panel_firewall.firewall.claims import check_reply  # noqa: E402
-from panel_firewall.firewall.connectors.sqlite_db import SqliteConnector  # noqa: E402
-from panel_firewall.firewall.connectors.stripe import StripeConnector  # noqa: E402
-from panel_firewall.firewall.engine import Firewall  # noqa: E402
-from panel_firewall.firewall.ledger import Ledger  # noqa: E402
-from panel_firewall.firewall.policy import parse_policy  # noqa: E402
-from panel_firewall.firewall.receipts import Signer, generate_key  # noqa: E402
-from panel_firewall.firewall.types import Action  # noqa: E402
+from panel_firewall.firewall.claims import check_reply
+from panel_firewall.firewall.connectors.sqlite_db import SqliteConnector
+from panel_firewall.firewall.connectors.stripe import StripeConnector
+from panel_firewall.firewall.engine import Firewall
+from panel_firewall.firewall.ledger import Ledger
+from panel_firewall.firewall.policy import parse_policy
+from panel_firewall.firewall.receipts import Signer, generate_key
+from panel_firewall.firewall.types import Action
 
 CONV = "conv-1"
 

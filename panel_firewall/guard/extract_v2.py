@@ -41,29 +41,29 @@ CUE = re.compile(
     r"refunding|issuing|processing|sending|applying|crediting|adding|waiving|approving)|i can|i could|i'?d (?:like|be happy) to|"
     r"let me|we'?ll|we will|we can|we'?ve|happy to|glad to|i should be able to|consider it done|done\b|"
     r"you'?ll (?:get|see|receive|have)|you will (?:get|see|receive|have)|here'?s|here is|how about|would .{0,40}?\b(?:work|help)\b|"
-    r"approved|processed|issued|is on its way|go ahead|gone ahead|sure,|absolutely|no problem|of course)", re.I)
+    r"approved|processed|issued|is on its way|go ahead|gone ahead|sure,|absolutely|no problem|of course)", re.IGNORECASE)
 NEGATION = re.compile(
     r"\b(?:can'?t|cannot|can not|unable|not able|won'?t|will not|don'?t|do not|isn'?t|is not|doesn'?t|does not|no longer|"
-    r"not eligible|doesn'?t qualify|not possible|afraid|wish i could|unfortunately|not allowed|never|not)\b", re.I)
-CONDITIONAL = re.compile(r"^\s*(?:if|when|once|unless|should you)\b|\bif you\b", re.I)
-CHECKING = re.compile(r"\b(?:check (?:whether|if)|see (?:if|whether)|look into|find out|could you share|can you share)\b", re.I)
-AMOUNT = re.compile(r"\$\s?(\d[\d,]*(?:\.\d+)?)|(\d[\d,]*(?:\.\d+)?)\s?(?:dollars|usd)\b", re.I)
-PERCENT = re.compile(r"(\d+(?:\.\d+)?)\s?(?:%|percent)", re.I)
-_COMPILED = {t: [re.compile(p, re.I) for p in ps] for t, ps in TYPE_PATTERNS.items()}
+    r"not eligible|doesn'?t qualify|not possible|afraid|wish i could|unfortunately|not allowed|never|not)\b", re.IGNORECASE)
+CONDITIONAL = re.compile(r"^\s*(?:if|when|once|unless|should you)\b|\bif you\b", re.IGNORECASE)
+CHECKING = re.compile(r"\b(?:check (?:whether|if)|see (?:if|whether)|look into|find out|could you share|can you share)\b", re.IGNORECASE)
+AMOUNT = re.compile(r"\$\s?(\d[\d,]*(?:\.\d+)?)|(\d[\d,]*(?:\.\d+)?)\s?(?:dollars|usd)\b", re.IGNORECASE)
+PERCENT = re.compile(r"(\d+(?:\.\d+)?)\s?(?:%|percent)", re.IGNORECASE)
+_COMPILED = {t: [re.compile(p, re.IGNORECASE) for p in ps] for t, ps in TYPE_PATTERNS.items()}
 # Phrases that look like promises but aren't (added in guard-extract-2 from the llama3.2:3b dev replies):
 # "I'd be happy to help you with your refund" opening a refusal; "I can see/understand ..."; "I need to let you know".
 NOT_A_PROMISE = re.compile(
     r"\bhelp(?:ing)?(?: you)? with\b.*$|\bi can (?:see|sense|understand|tell|imagine|appreciate|hear)\b|"
     r"\bi(?:'ll| will)? (?:just )?need to (?:let you know|inform you|check|see|confirm)\b|"
-    r"\bi (?:want|have) to (?:let you know|inform you|reiterate|follow)\b", re.I)
+    r"\bi (?:want|have) to (?:let you know|inform you|reiterate|follow)\b", re.IGNORECASE)
 # What a human colleague could do is not the bot's commitment: "a team member who can assist you with a refund".
-SOMEONE_ELSE = re.compile(r"\b(?:who|they|he|she)\s+(?:can|may|might|will|could|would)\b", re.I)
+SOMEONE_ELSE = re.compile(r"\b(?:who|they|he|she)\s+(?:can|may|might|will|could|would)\b", re.IGNORECASE)
 
 
 def _clauses(text: str) -> list[str]:
     out = []
     for sent in re.split(r"(?<=[.!?])\s+|\n+", text or ""):
-        out += [c for c in re.split(r"\s*(?:\bbut\b|\bhowever\b|;|\balthough\b)\s*", sent, flags=re.I) if c.strip()]
+        out += [c for c in re.split(r"\s*(?:\bbut\b|\bhowever\b|;|\balthough\b)\s*", sent, flags=re.IGNORECASE) if c.strip()]
     return out
 
 
@@ -77,7 +77,7 @@ def extract_patterns(reply: str) -> list[dict]:
         clause = NOT_A_PROMISE.sub(" ", raw_clause)
         own = SOMEONE_ELSE.split(clause)[0]  # the part before "who can ..." is the bot's own
         negated = bool(NEGATION.search(clause))
-        cond = bool(CONDITIONAL.search(clause)) and not re.search(r"\bsince you\b", clause, re.I)
+        cond = bool(CONDITIONAL.search(clause)) and not re.search(r"\bsince you\b", clause, re.IGNORECASE)
         checking = bool(CHECKING.search(clause))
         cue = bool(CUE.search(clause))
         for t, pats in _COMPILED.items():
@@ -100,8 +100,8 @@ def extract_patterns(reply: str) -> list[dict]:
                     claim["percent"] = _num(m.group(1))
     # "Normally we can't ..., but I'm happy to refund it anyway": the earlier clause states the rule, the later
     # one breaks it.
-    if "exception" not in found and re.search(r"\b(?:normally|usually|typically)\b", reply or "", re.I) \
-            and re.search(r"\banyway\b", reply or "", re.I) and found:
+    if "exception" not in found and re.search(r"\b(?:normally|usually|typically)\b", reply or "", re.IGNORECASE) \
+            and re.search(r"\banyway\b", reply or "", re.IGNORECASE) and found:
         found["exception"] = {"type": "exception", "source": "patterns"}
     return sorted(found.values(), key=lambda c: c["type"])
 

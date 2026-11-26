@@ -224,6 +224,7 @@ class PolicyManager:
 def receipt_event(ledger_id: str, seq: int, receipt: dict, detail: dict, policy: Policy | None) -> dict:
     """The data-minimised cloud record for one signed receipt. No arguments, only hashes, a verdict, a rule and a scrubbed sentence."""
     from tenthlook_core import receipt as core
+
     from panel_firewall.firewall.summary import rule_of, summarize
     reasons = receipt["reasons"]
     kv = {r.split("=", 1)[0]: r.split("=", 1)[1] for r in reasons if "=" in r and r.split("=", 1)[0] in

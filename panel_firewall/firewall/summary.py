@@ -5,11 +5,10 @@ Everything here reads only the ledger and returns data minimised for sharing: to
 """
 from __future__ import annotations
 
-import json
 import re
 import time
 
-from panel_firewall.firewall.scrub import scrub, scrub_text
+from panel_firewall.firewall.scrub import scrub_text
 
 # reason text (as produced by policy.evaluate, sqlguard and the connectors) -> the rule that produced it
 _RULES = [

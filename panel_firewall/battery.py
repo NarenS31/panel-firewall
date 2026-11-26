@@ -12,7 +12,7 @@ from __future__ import annotations
 import math
 import time
 from collections import defaultdict
-from typing import Callable
+from collections.abc import Callable
 
 from panel_firewall.items import FORMAT_HINT, Item
 from panel_firewall.parse import parse_answer

@@ -1,7 +1,5 @@
 """CLI: keygen outside repo, approve/deny/pending against a shared ledger, verify-receipt, start refuses without a key."""
 import json
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -12,7 +10,7 @@ from panel_firewall.firewall.config import build_firewall
 from panel_firewall.firewall.types import Action, FirewallError
 
 ROOT = Path(__file__).resolve().parents[1]
-from tests.fw_helpers import IN_GIT_CHECKOUT, NOT_IN_GIT_REASON  # noqa: E402
+from tests.fw_helpers import IN_GIT_CHECKOUT, NOT_IN_GIT_REASON
 
 
 @pytest.fixture

@@ -55,7 +55,12 @@ def run_checks(a, transport=None) -> list[Check]:
         add(OK if found else FAIL, "Upstream command", f"{up[0]} " + ("found" if found else "not found on PATH"),
             "" if found else f"Install `{up[0]}` or give the full path after `--`.")
 
-    from panel_firewall.firewall.cloud import config_path, load_saved_config, resolve_api_key, saved_config_mismatch
+    from panel_firewall.firewall.cloud import (
+        config_path,
+        load_saved_config,
+        resolve_api_key,
+        saved_config_mismatch,
+    )
     init_fix = "Run the `usepanel init --token ...` command shown in the Panel Cloud dashboard again (it makes a new key)."
     url = getattr(a, "cloud_url", None)
     saved = None

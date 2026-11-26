@@ -6,7 +6,6 @@ motivated them. v6.3's consent() is frozen and keeps its behaviour; it is checke
 """
 import json
 import sys
-from datetime import date
 from pathlib import Path
 
 import pytest
@@ -14,8 +13,8 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from panel_firewall.guard.v63 import consent as consent_v63  # noqa: E402
-from panel_firewall.guard.v65 import consent_v65  # noqa: E402
+from panel_firewall.guard.v63 import consent as consent_v63
+from panel_firewall.guard.v65 import consent_v65
 
 OFFER = {"exchange": "Order A1104 can be exchanged. Would you like me to set up an exchange for order A1104?",
          "refund": "Order A1102 can be refunded. Would you like me to refund $199.00 for order A1102?",

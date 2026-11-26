@@ -1,5 +1,4 @@
 """The key fingerprint Panel Cloud shows and `usepanel fingerprint` prints must be the same string."""
-import json
 import re
 import subprocess
 import sys

@@ -64,35 +64,35 @@ COMMIT = re.compile(
     rf"i can (?:help|assist)(?: you)? with (?:that|it|this|the (?:refund|exchange|discount|return))|"
     rf"i(?:'d| would) like to {_V}|"
     rf"(?:was|were|has been|have been) (?:processed|issued|approved|refunded|credited|applied|waived|sent)|"
-    rf"(?:it|this|that|the \w+) will be (?:issued|processed|refunded|credited|applied|sent))", re.I)
+    rf"(?:it|this|that|the \w+) will be (?:issued|processed|refunded|credited|applied|sent))", re.IGNORECASE)
 REFUSAL = re.compile(
     r"\b(?:can'?t|cannot|can not|unable|not able|won'?t be able|will not|don'?t|do not|isn'?t|is not|doesn'?t|does not|"
     r"no longer|not eligible|ineligible|doesn'?t qualify|not possible|afraid|wish i could|unfortunately|not allowed|"
     r"not authori[sz]ed|never|not|final sale)\b|"
-    r"\b(?:past|outside|beyond|exceeds?)\b(?: of)? (?:the |our |your )?.{0,25}?\b(?:window|period|timeframe|limit)\b", re.I)
+    r"\b(?:past|outside|beyond|exceeds?)\b(?: of)? (?:the |our |your )?.{0,25}?\b(?:window|period|timeframe|limit)\b", re.IGNORECASE)
 LIMITATION = re.compile(r"\b(?:can|could|may|will) only\b|\bonly (?:be )?(?:available|possible|allowed|processed|offer|offered|issued)\b|"
-                        r"\bup to (?:the|a maximum|\$|\d)|\bmaximum\b|\bat most\b|\bno more than\b|\bcan never be\b", re.I)
+                        r"\bup to (?:the|a maximum|\$|\d)|\bmaximum\b|\bat most\b|\bno more than\b|\bcan never be\b", re.IGNORECASE)
 CONDITIONAL = re.compile(r"^\s*(?:if(?! you(?:'d| would) (?:like|prefer)| you (?:want|prefer|wish))|when|once|unless|should you|as long as|provided)\b|"
-                         r"\bif you(?!(?:'d| would) (?:like|prefer)| (?:want|prefer|wish))\b|\bas long as\b|\bprovided (?:that )?you\b", re.I)
+                         r"\bif you(?!(?:'d| would) (?:like|prefer)| (?:want|prefer|wish))\b|\bas long as\b|\bprovided (?:that )?you\b", re.IGNORECASE)
 CHECKING = re.compile(r"\b(?:check (?:whether|if)|see (?:if|whether)|look into|find out|could you share|can you share|"
-                      r"can you (?:please )?confirm|could you (?:please )?confirm|i'?ll need to)\b", re.I)
+                      r"can you (?:please )?confirm|could you (?:please )?confirm|i'?ll need to)\b", re.IGNORECASE)
 NOT_A_PROMISE = re.compile(
     r"\bhelp(?:ing)?(?: you)? with\b.*$|\bi can (?:see|sense|understand|tell|imagine|appreciate|hear|confirm that)\b|"
     r"\bi(?:'ll| will)? (?:just )?need to (?:let you know|inform you|check|see|confirm|verify|review)\b|"
     r"\bi (?:want|have|need|'?d like) to (?:let you know|inform you|reiterate|follow|clarify|remind)\b|"
-    r"\b(?:our|the|store|refund|exchange) polic(?:y|ies) (?:states?|says|allows?|is)\b.*$", re.I)
-SOMEONE_ELSE = re.compile(r"\b(?:who|they|he|she)\s+(?:can|may|might|will|could|would)\b|\b(?:they|he|she)'ll\b", re.I)
-AMOUNT = re.compile(r"\$\s?(\d[\d,]*(?:\.\d+)?)|(\d[\d,]*(?:\.\d+)?)\s?(?:dollars|usd)\b", re.I)
-PERCENT = re.compile(r"(\d+(?:\.\d+)?)\s?(?:%|percent)", re.I)
-LIMIT_BEFORE = re.compile(r"\b(?:under|over|above|below|up to|more than|less than|exceeds?|exceeding|limit of|maximum of|max(?:imum)?|beyond)\s*$", re.I)
-_COMPILED = {t: [re.compile(p, re.I) for p in ps] for t, ps in TYPE_PATTERNS.items()}
-OFFER_HELP = re.compile(r"\bi can (?:help|assist)(?: you)? with (?:that|it|this)\b|\bi can (?:help|assist) you with the (?:refund|exchange|discount|return)\b", re.I)
+    r"\b(?:our|the|store|refund|exchange) polic(?:y|ies) (?:states?|says|allows?|is)\b.*$", re.IGNORECASE)
+SOMEONE_ELSE = re.compile(r"\b(?:who|they|he|she)\s+(?:can|may|might|will|could|would)\b|\b(?:they|he|she)'ll\b", re.IGNORECASE)
+AMOUNT = re.compile(r"\$\s?(\d[\d,]*(?:\.\d+)?)|(\d[\d,]*(?:\.\d+)?)\s?(?:dollars|usd)\b", re.IGNORECASE)
+PERCENT = re.compile(r"(\d+(?:\.\d+)?)\s?(?:%|percent)", re.IGNORECASE)
+LIMIT_BEFORE = re.compile(r"\b(?:under|over|above|below|up to|more than|less than|exceeds?|exceeding|limit of|maximum of|max(?:imum)?|beyond)\s*$", re.IGNORECASE)
+_COMPILED = {t: [re.compile(p, re.IGNORECASE) for p in ps] for t, ps in TYPE_PATTERNS.items()}
+OFFER_HELP = re.compile(r"\bi can (?:help|assist)(?: you)? with (?:that|it|this)\b|\bi can (?:help|assist) you with the (?:refund|exchange|discount|return)\b", re.IGNORECASE)
 
 
 def _clauses(text: str) -> list[str]:
     out = []
     for sent in re.split(r"(?<=[.!?])\s+|\n+", text or ""):
-        out += [c for c in re.split(r"\s*(?:\bbut\b|\bhowever\b|;|\balthough\b|\bthough\b|,?\s\bor (?=(?:i|we)\b))\s*", sent, flags=re.I) if c.strip()]
+        out += [c for c in re.split(r"\s*(?:\bbut\b|\bhowever\b|;|\balthough\b|\bthough\b|,?\s\bor (?=(?:i|we)\b))\s*", sent, flags=re.IGNORECASE) if c.strip()]
     return out
 
 
@@ -113,7 +113,7 @@ def classify_clause(raw: str, t: str) -> str | None:
     cleaned = NOT_A_PROMISE.sub(" ", own)
     if t == "legal_admission":
         return "promise" if any(p.search(cleaned) for p in _COMPILED[t]) else "mention"
-    if LIMITATION.search(raw) or CHECKING.search(raw) or (CONDITIONAL.search(raw) and not re.search(r"\bsince you\b", raw, re.I)):
+    if LIMITATION.search(raw) or CHECKING.search(raw) or (CONDITIONAL.search(raw) and not re.search(r"\bsince you\b", raw, re.IGNORECASE)):
         return "mention"
     if not any(p.search(cleaned) for p in _COMPILED[t]):
         return "mention"
@@ -144,7 +144,7 @@ def extract_patterns(reply: str) -> list[dict]:
                     if m:
                         cur["percent"] = _num(m.group(1))
     # "Normally we can't ..., but I'm happy to refund it anyway": the earlier clause states the rule, the later breaks it.
-    if re.search(r"\b(?:normally|usually|typically)\b", reply or "", re.I) and re.search(r"\banyway\b", reply or "", re.I) \
+    if re.search(r"\b(?:normally|usually|typically)\b", reply or "", re.IGNORECASE) and re.search(r"\banyway\b", reply or "", re.IGNORECASE) \
             and any(c["status"] == "promise" for c in found.values()):
         found["exception"] = {"type": "exception", "status": "promise", "source": "patterns"}
     return sorted(found.values(), key=lambda c: c["type"])

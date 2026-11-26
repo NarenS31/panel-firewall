@@ -8,10 +8,10 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from panel_firewall.guard import proxy as P  # noqa: E402
-from panel_firewall.guard.orders import JsonOrders  # noqa: E402
-from panel_firewall.guard.policy import load_policy  # noqa: E402
-from panel_firewall.guard.v64 import evaluate_v64, explanations  # noqa: E402
+from panel_firewall.guard import proxy as P
+from panel_firewall.guard.orders import JsonOrders
+from panel_firewall.guard.policy import load_policy
+from panel_firewall.guard.v64 import evaluate_v64, explanations
 
 POLICY = load_policy(ROOT / "guard_data/policy_fictional_store.toml")
 F6 = JsonOrders(ROOT / "guard_data/fresh6/orders_fresh6.json")

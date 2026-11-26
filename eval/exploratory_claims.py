@@ -7,8 +7,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from panel_firewall.firewall.claims import check_reply  # noqa: E402
-from panel_firewall.firewall.ledger import Ledger  # noqa: E402
+from panel_firewall.firewall.claims import check_reply
+from panel_firewall.firewall.ledger import Ledger
 
 CLAIMS = [
     "I've gone ahead and issued a full refund.", "Your money is on its way back to your card.", "The refund is complete.",

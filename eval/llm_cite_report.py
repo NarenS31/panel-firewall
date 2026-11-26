@@ -1,8 +1,8 @@
 """Summarizes results/llm_cite/*_rows.jsonl by cite_mode (see results/prereg_llm_cite_ablation.md)."""
 import glob
 import json
-from collections import defaultdict
 from pathlib import Path
+
 ROOT = Path(__file__).resolve().parents[1]
 rows = [json.loads(l) for f in sorted(glob.glob(str(ROOT / "results/llm_cite/*_rows.jsonl"))) for l in open(f) if l.strip()]
 out = {}

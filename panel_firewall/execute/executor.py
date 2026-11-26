@@ -57,7 +57,7 @@ class Limits:
     mode: str = "dry_run"
 
     @classmethod
-    def from_policy_file(cls, path: str | Path) -> "Limits":
+    def from_policy_file(cls, path: str | Path) -> Limits:
         ex = tomllib.loads(Path(path).read_text(encoding="utf-8")).get("execution") or {}
         lim = cls(**{k: ex[k] for k in cls.__dataclass_fields__ if k in ex})
         if lim.mode not in MODES:
@@ -234,7 +234,11 @@ class ShopifyBackend:
         self.client = client
 
     def execute(self, action: dict, order: dict, key: str) -> dict:
-        from panel_firewall.shopify.actions import create_discount_code, create_refund, shopify_key
+        from panel_firewall.shopify.actions import (
+            create_discount_code,
+            create_refund,
+            shopify_key,
+        )
         if action["type"] == "refund":
             return create_refund(self.client, order, float(action["amount"]), shopify_key(key),
                                  note=f"Panel refund (action {key[:12]})")

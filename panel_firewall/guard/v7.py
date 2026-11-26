@@ -37,9 +37,13 @@ from pathlib import Path
 
 from panel_firewall.guard.orders import ORDER_ID, find_order_id
 from panel_firewall.guard.policy import Policy
-from panel_firewall.guard.v5 import sentences
-from panel_firewall.guard.v62 import compose, confirmation, executed_before, fallback_v62
-from panel_firewall.guard.v63 import TYPE_WORDS, last_turn
+from panel_firewall.guard.v62 import (
+    compose,
+    confirmation,
+    executed_before,
+    fallback_v62,
+)
+from panel_firewall.guard.v63 import last_turn
 from panel_firewall.guard.v64 import _allowed, evaluate_v64, instructions_v64
 
 V7_VERSION = "guard-v7-confirm"
@@ -89,7 +93,7 @@ _FILLER = ["please", "thanks", "thank you", "ok", "okay", "alright"]   # fillers
 _LONE_OK = {"ok", "okay", "alright", "all right", "fine"}
 _PHRASES = sorted([(p.split(), True) for p in _STRONG] + [(p.split(), False) for p in _FILLER], key=lambda x: -len(x[0]))
 _DECLINE = re.compile(r"^\s*(?:no|nope|nah)\b(?!\s+(?:problem|worries))|\bno thanks\b|\bnever mind\b|\bcancel\b|\bforget it\b|"
-                      r"\bdon'?t\b|\bdo not\b|\bstop\b|\bchanged my mind\b|\bnot interested\b|\bleave it\b", re.I)
+                      r"\bdon'?t\b|\bdo not\b|\bstop\b|\bchanged my mind\b|\bnot interested\b|\bleave it\b", re.IGNORECASE)
 
 
 def _norm(msg: str) -> list[str]:
@@ -337,5 +341,16 @@ def guarded_v7(messages: list[dict], call, policy: Policy, orders, store: Confir
                    round(sum(x["gen_s"] for x in attempts[1:]), 3), {"event": "fallback"})
 
 
-__all__ = ["V7_VERSION", "ConfirmationStore", "confirmation_prompt", "reask_prompt", "fingerprint", "is_affirmative", "is_decline",
-           "consent_v7", "guarded_v7", "instructions_v7", "guard_system_v7"]
+__all__ = [
+    "V7_VERSION",
+    "ConfirmationStore",
+    "confirmation_prompt",
+    "consent_v7",
+    "fingerprint",
+    "guard_system_v7",
+    "guarded_v7",
+    "instructions_v7",
+    "is_affirmative",
+    "is_decline",
+    "reask_prompt",
+]

@@ -4,7 +4,6 @@ import asyncio
 import json
 import shutil
 import sqlite3
-import sys
 from pathlib import Path
 
 import pytest

@@ -2,6 +2,7 @@
 models invent ids, so the cumulative cap was never exercised). tasks.jsonl itself is frozen and untouched. Scripted replay data is unchanged."""
 import json
 from pathlib import Path
+
 d = Path(__file__).parent
 out = []
 for l in (d / "tasks.jsonl").read_text().splitlines():

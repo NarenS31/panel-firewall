@@ -24,17 +24,17 @@ import httpx
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from panel_firewall.execute.executor import FakeBackend  # noqa: E402
-from panel_firewall.firewall.claims import check_reply  # noqa: E402
-from panel_firewall.firewall.connectors.shopify import ShopifyConnector  # noqa: E402
-from panel_firewall.firewall.connectors.sqlite_db import SqliteConnector  # noqa: E402
-from panel_firewall.firewall.connectors.stripe import StripeConnector  # noqa: E402
-from panel_firewall.firewall.engine import Firewall  # noqa: E402
-from panel_firewall.firewall.ledger import Ledger  # noqa: E402
-from panel_firewall.firewall.policy import load_policy  # noqa: E402
-from panel_firewall.firewall.receipts import Signer, generate_key  # noqa: E402
-from panel_firewall.firewall.types import Action  # noqa: E402
-from panel_firewall.guard.policy import load_policy as load_store_policy  # noqa: E402
+from panel_firewall.execute.executor import FakeBackend
+from panel_firewall.firewall.claims import check_reply
+from panel_firewall.firewall.connectors.shopify import ShopifyConnector
+from panel_firewall.firewall.connectors.sqlite_db import SqliteConnector
+from panel_firewall.firewall.connectors.stripe import StripeConnector
+from panel_firewall.firewall.engine import Firewall
+from panel_firewall.firewall.ledger import Ledger
+from panel_firewall.firewall.policy import load_policy
+from panel_firewall.firewall.receipts import Signer, generate_key
+from panel_firewall.firewall.types import Action
+from panel_firewall.guard.policy import load_policy as load_store_policy
 
 POLICY = ROOT / "eval/policy_eval.yaml"
 STORE_POLICY = ROOT / "guard_data/policy_fictional_store.toml"

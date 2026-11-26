@@ -36,36 +36,36 @@ from panel_firewall.guard.v62 import evaluate_v62, instructions_v62
 V63_VERSION = "guard-v6.3-proxy"
 
 TYPE_WORDS = {
-    "refund": re.compile(r"\brefund|money back|reimburs|pay me back|send (?:it |them |this )?back", re.I),
-    "exchange": re.compile(r"\bexchang|\bswap|different (?:size|colou?r)|\breplace", re.I),
-    "discount": re.compile(r"\bdiscount|\d+\s?%|percent off|\bcoupon|\bpromo", re.I),
+    "refund": re.compile(r"\brefund|money back|reimburs|pay me back|send (?:it |them |this )?back", re.IGNORECASE),
+    "exchange": re.compile(r"\bexchang|\bswap|different (?:size|colou?r)|\breplace", re.IGNORECASE),
+    "discount": re.compile(r"\bdiscount|\d+\s?%|percent off|\bcoupon|\bpromo", re.IGNORECASE),
     "handoff_to_human": re.compile(r"\b(?:a (?:real )?person|human|someone|an? agent|manager|supervisor|representative|"
-                                   r"team member|member of (?:your|the) team|speak (?:to|with)|talk (?:to|with))\b", re.I),
+                                   r"team member|member of (?:your|the) team|speak (?:to|with)|talk (?:to|with))\b", re.IGNORECASE),
 }
-TYPE_WORDS["store_credit"] = re.compile(r"store credit|gift ?card|voucher", re.I)
+TYPE_WORDS["store_credit"] = re.compile(r"store credit|gift ?card|voucher", re.IGNORECASE)
 REQUEST = re.compile(
     r"\b(?:please|pls|i want|i'?d like|i would like|i need|i demand|can you|could you|would you|will you|go ahead|"
     r"just do|do it|process (?:it|this|the|my)|approve|give me|set (?:it |one |that )?up|send me|i'?ll take|let'?s do|"
-    r"(?:can|could|may) i (?:get|have)|i'?m (?:asking|requesting) (?:for|you))\b", re.I)
+    r"(?:can|could|may) i (?:get|have)|i'?m (?:asking|requesting) (?:for|you))\b", re.IGNORECASE)
 IMPERATIVE = re.compile(r"(?:^|[.!?]\s+|\band\s+|,\s*)(?:please\s+)?(?:just\s+)?(?:refund|exchange|swap|replace|give|approve|"
-                        r"process|send|set up|apply|add|connect|transfer)\b", re.I)
+                        r"process|send|set up|apply|add|connect|transfer)\b", re.IGNORECASE)
 INFO_QUESTION = re.compile(
     r"\b(?:what (?:are|is) my options|what (?:can|could|should) i do|what are the options|(?:can|could) i still|"
     r"is it (?:too late|possible|still possible|still ok)|am i (?:eligible|able|allowed)|would i be able|"
     r"how (?:long|many days)|do i (?:have|qualify)|does (?:it|this|that) qualify|if so|just (?:asking|wondering|curious)|"
-    r"(?:i'?m |i was )?wondering (?:if|whether)|is there (?:any|a) way|what happens if|what would happen)\b", re.I)
+    r"(?:i'?m |i was )?wondering (?:if|whether)|is there (?:any|a) way|what happens if|what would happen)\b", re.IGNORECASE)
 POSSIBILITY_Q = re.compile(r"^\s*(?:hi|hello|hey)?[,!.\s]*(?:can|could|may) i (?:still )?(?:return|exchange|swap|send|"
-                           r"get (?:a |my )?(?:refund|money back))\b", re.I)
+                           r"get (?:a |my )?(?:refund|money back))\b", re.IGNORECASE)
 # a negation of the ACTION itself ("don't refund it", "no need to exchange", "actually, don't"), not any "don't"
 # in the message ("they don't fit", "I don't have the receipt", "no need to ask me anything")
 NEG_REQUEST = re.compile(
     r"\b(?:don'?t|do not|no need to|not)\s+(?:\w+\s+){0,2}?(?:refund|exchange|swap|replace|discount|connect|transfer|"
     r"hand (?:me|it|this) (?:off|over)|escalate)\b|\bnever mind\b|\bcancel (?:it|that|the|my)\b|\bactually,? (?:don'?t|no)\b|"
-    r"\bnot (?:yet|now)\b", re.I)
+    r"\bnot (?:yet|now)\b", re.IGNORECASE)
 YES = re.compile(r"^\s*(?:oh\s+)?(?:yes|yeah|yep|yup|sure|ok(?:ay)?|please(?: do)?|go ahead|do it|that would be "
                  r"(?:great|good|perfect|lovely)|sounds good|absolutely|definitely|i'?d like that|let'?s do (?:it|that)|"
-                 r"please go ahead|y)\b", re.I)
-NO = re.compile(r"\b(?:no|nope|not|don'?t|rather not|never mind|cancel|wait)\b", re.I)
+                 r"please go ahead|y)\b", re.IGNORECASE)
+NO = re.compile(r"\b(?:no|nope|not|don'?t|rather not|never mind|cancel|wait)\b", re.IGNORECASE)
 
 OFFERS = {
     "refund": "Would you like me to refund ${amount:.2f} for order {order}?",
@@ -80,7 +80,7 @@ def _offer_rx(t: str) -> re.Pattern:
     s = s.replace(re.escape("{amount:.2f}"), r"(?P<amount>\d+(?:\.\d+)?)")
     s = s.replace(re.escape("{percent:g}"), r"(?P<percent>\d+(?:\.\d+)?)")
     s = s.replace(re.escape("{order}"), r"(?P<order>#?[A-Za-z0-9-]+)")
-    return re.compile(s, re.I)
+    return re.compile(s, re.IGNORECASE)
 
 
 OFFER_RX = {t: _offer_rx(t) for t in OFFERS}
@@ -129,7 +129,7 @@ def asks_for(msg: str, action_type: str) -> bool:
         return False
     if NEG_REQUEST.search(msg):
         return False
-    if POSSIBILITY_Q.search(msg) and not re.search(r"\b(?:please|pls|i want|i'?d like|i need)\b", msg, re.I):
+    if POSSIBILITY_Q.search(msg) and not re.search(r"\b(?:please|pls|i want|i'?d like|i need)\b", msg, re.IGNORECASE):
         return False
     return bool(REQUEST.search(msg) or IMPERATIVE.search(msg))
 

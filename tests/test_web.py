@@ -11,8 +11,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from panel_firewall import web  # noqa: E402
-from panel_firewall.items import build_bank  # noqa: E402
+from panel_firewall import web
+from panel_firewall.items import build_bank
 
 SEEN_AUTH = []
 

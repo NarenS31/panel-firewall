@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from run_eval import backed, summarize  # noqa: E402
+from run_eval import backed, summarize
 
 rows = [json.loads(l) for l in open("results/eval/tasks_scripted_rows.jsonl")]
 orig = summarize(rows)

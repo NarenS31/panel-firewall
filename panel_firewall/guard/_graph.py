@@ -9,8 +9,9 @@ be type-checked against them.
 from __future__ import annotations
 
 import copy
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from typing import Any
 
 import numpy as np
 
@@ -79,7 +80,7 @@ class Relation:
     attrs: tuple = ()  # sorted (key, value) pairs; frozen so relations are hashable
 
     @staticmethod
-    def make(type: str, src: str, dst: str, **attrs) -> "Relation":
+    def make(type: str, src: str, dst: str, **attrs) -> Relation:
         return Relation(type, src, dst, tuple(sorted((k, _norm(v)) for k, v in attrs.items())))
 
     def get(self, key: str, default=None):
@@ -136,7 +137,7 @@ class Graph:
         return [r.dst for r in self.rels(type, src=id)]
 
     # --- utilities
-    def copy(self) -> "Graph":
+    def copy(self) -> Graph:
         g = Graph(meta=copy.deepcopy(self.meta))
         g.entities = {k: Entity(e.id, e.type, dict(e.attrs)) for k, e in self.entities.items()}
         g.relations = set(self.relations)
@@ -150,7 +151,7 @@ class Graph:
         }
 
     @staticmethod
-    def from_dict(d: dict) -> "Graph":
+    def from_dict(d: dict) -> Graph:
         g = Graph(meta=d.get("meta"))
         for e in d["entities"]:
             g.add(e["id"], e["type"], **e["attrs"])
@@ -158,7 +159,7 @@ class Graph:
             g.relate(r["type"], r["src"], r["dst"], **r["attrs"])
         return g
 
-    def diff(self, other: "Graph", tol: float = 1e-9) -> list[str]:
+    def diff(self, other: Graph, tol: float = 1e-9) -> list[str]:
         """Human-readable differences (used for surprise logging and tests)."""
         out = []
         for id in sorted(set(self.entities) | set(other.entities)):

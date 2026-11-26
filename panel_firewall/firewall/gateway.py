@@ -100,7 +100,7 @@ def explain(o: Outcome, cite_mode: str = "instruct") -> dict:
 class McpUpstream:
     """One upstream MCP server spoken to over stdio."""
 
-    def __init__(self, name: str, command: list[str], gateway: "Gateway", env: dict | None = None):
+    def __init__(self, name: str, command: list[str], gateway: Gateway, env: dict | None = None):
         self.name, self.command, self.gw, self.env = name, command, gateway, env
         self.proc: asyncio.subprocess.Process | None = None
         self._pending: dict[str, asyncio.Future] = {}
@@ -153,7 +153,7 @@ class McpUpstream:
         try:
             await self.send({"jsonrpc": "2.0", "id": rid, "method": method, **({"params": params} if params is not None else {})})
             return await asyncio.wait_for(fut, timeout)
-        except asyncio.TimeoutError as e:
+        except TimeoutError as e:
             self._pending.pop(rid, None)
             raise TimeoutError(f"{method} timed out after {timeout}s") from e
 
@@ -162,7 +162,7 @@ class McpUpstream:
             try:
                 self.proc.stdin.close()
                 await asyncio.wait_for(self.proc.wait(), 3)
-            except (asyncio.TimeoutError, ProcessLookupError, OSError):
+            except (TimeoutError, ProcessLookupError, OSError):
                 try:
                     self.proc.kill()
                 except ProcessLookupError:

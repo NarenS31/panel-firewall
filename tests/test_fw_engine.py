@@ -5,10 +5,22 @@ import time
 
 import pytest
 
-from panel_firewall.firewall.ledger import Ledger, approval_id
-from panel_firewall.firewall.receipts import generate_key, load_public_key, verify_receipt, Signer
-from panel_firewall.firewall.types import FirewallError, Action
-from tests.fw_helpers import IN_GIT_CHECKOUT, NOT_IN_GIT_REASON, FakeConnector, act, make_fw, pubkey_path
+from panel_firewall.firewall.ledger import Ledger
+from panel_firewall.firewall.receipts import (
+    Signer,
+    generate_key,
+    load_public_key,
+    verify_receipt,
+)
+from panel_firewall.firewall.types import Action, FirewallError
+from tests.fw_helpers import (
+    IN_GIT_CHECKOUT,
+    NOT_IN_GIT_REASON,
+    FakeConnector,
+    act,
+    make_fw,
+    pubkey_path,
+)
 
 
 def test_allow_executes_once_and_replays():

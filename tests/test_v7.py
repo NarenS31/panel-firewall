@@ -12,13 +12,20 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from panel_firewall.execute.executor import Executor, FakeBackend, Limits  # noqa: E402
-from panel_firewall.execute.handoff import LogNotifier  # noqa: E402
-from panel_firewall.execute.store import ActionStore  # noqa: E402
-from panel_firewall.guard.orders import JsonOrders  # noqa: E402
-from panel_firewall.guard.policy import load_policy  # noqa: E402
-from panel_firewall.guard.v7 import (ConfirmationStore, confirmation_prompt, consent_v7, fingerprint, guarded_v7,  # noqa: E402
-                            is_affirmative, reask_prompt)
+from panel_firewall.execute.executor import Executor, FakeBackend, Limits
+from panel_firewall.execute.handoff import LogNotifier
+from panel_firewall.execute.store import ActionStore
+from panel_firewall.guard.orders import JsonOrders
+from panel_firewall.guard.policy import load_policy
+from panel_firewall.guard.v7 import (
+    ConfirmationStore,
+    confirmation_prompt,
+    consent_v7,
+    fingerprint,
+    guarded_v7,
+    is_affirmative,
+    reask_prompt,
+)
 
 POLICY = load_policy(ROOT / "guard_data/policy_fictional_store.toml")
 ORDERS = JsonOrders(ROOT / "guard_data/fresh8/orders_fresh8.json")

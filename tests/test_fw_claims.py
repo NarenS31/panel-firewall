@@ -5,7 +5,12 @@ import httpx
 import pytest
 
 from panel_firewall.execute.executor import FakeBackend
-from panel_firewall.firewall.claims import NOT_DONE_BLOCKED, NOT_DONE_GENERIC, check_reply, find_claims
+from panel_firewall.firewall.claims import (
+    NOT_DONE_BLOCKED,
+    NOT_DONE_GENERIC,
+    check_reply,
+    find_claims,
+)
 from panel_firewall.firewall.connectors.shopify import ShopifyConnector
 from panel_firewall.firewall.connectors.sqlite_db import SqliteConnector
 from panel_firewall.firewall.connectors.stripe import StripeConnector
@@ -13,7 +18,7 @@ from panel_firewall.firewall.engine import Firewall
 from panel_firewall.firewall.ledger import Ledger
 from panel_firewall.firewall.types import Action
 from tests.fw_helpers import policy, signer
-from tests.test_fw_shopify import Orders, STORE
+from tests.test_fw_shopify import STORE, Orders
 
 CONV = "conv-1"
 
@@ -127,14 +132,13 @@ def test_other_conversations_do_not_back_a_claim(world):
 
 
 def test_unbacked_claim_hook_in_guarded_bot_leaves_default_behaviour_alone():
-    import inspect
     from panel_firewall.guard.guard import GuardedBot
     assert GuardedBot.__dataclass_fields__["claim_ledger"].default is None
 
 
 def test_guarded_bot_rewrites_unbacked_claim_before_it_reaches_the_customer(world):
-    from tests.test_guard import ORDERS, POLICY, Scripted
     from panel_firewall.guard.guard import GuardedBot
+    from tests.test_guard import ORDERS, POLICY, Scripted
     # the store-policy guard would itself pass a plain thank-you; the firewall hook catches the completion claim
     bot = Scripted(["Thanks for waiting. All done, it's been taken care of."])
     g = GuardedBot(bot, POLICY, ORDERS, claim_ledger=world.ledger, conversation_id=CONV)

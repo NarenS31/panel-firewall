@@ -10,9 +10,23 @@ import pytest
 from panel_firewall.firewall.cli import main
 from panel_firewall.firewall.policy import parse_policy
 from panel_firewall.firewall.scrub import scrub, scrub_text
-from panel_firewall.firewall.summary import build_report, export_log, format_report, parse_since, rule_of
+from panel_firewall.firewall.summary import (
+    build_report,
+    export_log,
+    format_report,
+    parse_since,
+    rule_of,
+)
 from panel_firewall.firewall.types import FirewallError
-from tests.fw_helpers import FakeConnector, McpClient, act, make_fw, panel_cmd, policy, text_of, write_policy
+from tests.fw_helpers import (
+    FakeConnector,
+    McpClient,
+    act,
+    make_fw,
+    panel_cmd,
+    policy,
+    text_of,
+)
 from tests.test_fw_gateway import FAKE, rig, run, upstream_calls  # noqa: F401  (fixture)
 
 ACTIONS = {"fake.pay": {"max_amount": 100, "consent_over_amount": 50}, "fake.read": {"risk": "read"}}
@@ -150,7 +164,6 @@ def test_report_groups_by_tool_and_rule_and_totals_amounts():
 
 def test_report_respects_since_window_and_empty_case():
     clock = [1_000.0]
-    from panel_firewall.firewall.engine import Firewall
     fw, _ = shadow_fw(clock=lambda: clock[0])
     fw.handle(act(amount=500))
     clock[0] += 3 * 86400

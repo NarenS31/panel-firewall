@@ -20,14 +20,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from panel_firewall.execute.executor import Executor, Limits, ShopifyBackend  # noqa: E402
-from panel_firewall.execute.handoff import notifier_from_config  # noqa: E402
-from panel_firewall.execute.store import ActionStore  # noqa: E402
-from panel_firewall.guard.policy import load_policy  # noqa: E402
-from panel_firewall.shopify import API_VERSION  # noqa: E402
-from panel_firewall.shopify.client import ShopifyClient  # noqa: E402
-from panel_firewall.shopify.config import Config  # noqa: E402
-from panel_firewall.shopify.orders import ShopifyOrders  # noqa: E402
+from panel_firewall.execute.executor import Executor, Limits, ShopifyBackend
+from panel_firewall.execute.handoff import notifier_from_config
+from panel_firewall.execute.store import ActionStore
+from panel_firewall.guard.policy import load_policy
+from panel_firewall.shopify import API_VERSION
+from panel_firewall.shopify.client import ShopifyClient
+from panel_firewall.shopify.config import Config
+from panel_firewall.shopify.orders import ShopifyOrders
 
 POLICY = ROOT / "guard_data/policy_fictional_store.toml"
 
@@ -53,7 +53,7 @@ def main() -> None:
     cfg = Config()
     print(f"   secret file: {cfg.secrets_file}  set: {', '.join(cfg.present())}")
     print(f"   store: {cfg.store}   API version: {API_VERSION}")
-    if input(f"   Type the store domain to confirm it is your DEVELOPMENT store: ").strip() != cfg.store:
+    if input("   Type the store domain to confirm it is your DEVELOPMENT store: ").strip() != cfg.store:
         sys.exit("   Not confirmed. Nothing was done.")
 
     step(2, "access token (client credentials grant)")

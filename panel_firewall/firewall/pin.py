@@ -23,7 +23,6 @@ import json
 import os
 import secrets
 import stat
-import sys
 import tempfile
 import time
 from pathlib import Path

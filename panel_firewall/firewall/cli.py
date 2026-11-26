@@ -44,7 +44,12 @@ def cmd_pending(a):
 
 
 def _decide(a, deny):
-    from panel_firewall.firewall.pin import ApprovalGate, PinError, PinStore, read_secret_from_tty
+    from panel_firewall.firewall.pin import (
+        ApprovalGate,
+        PinError,
+        PinStore,
+        read_secret_from_tty,
+    )
     led = _ledger(a)
     who = a.who or getpass.getuser()
     store = PinStore(a.pin_file)
@@ -68,7 +73,12 @@ def cmd_unfreeze(a):
     from panel_firewall.firewall.config import ledger_path
     from panel_firewall.firewall.engine import Firewall
     from panel_firewall.firewall.ledger import Ledger
-    from panel_firewall.firewall.pin import ApprovalGate, PinError, PinStore, read_secret_from_tty
+    from panel_firewall.firewall.pin import (
+        ApprovalGate,
+        PinError,
+        PinStore,
+        read_secret_from_tty,
+    )
     from panel_firewall.firewall.policy import load_policy
     from panel_firewall.firewall.receipts import Signer
     pol = load_policy(a.policy) if a.policy else None
@@ -144,8 +154,8 @@ def cmd_export_log(a):
 
 
 def cmd_ui(a):
-    from panel_firewall.firewall.ui import serve_forever
     from panel_firewall.firewall.pin import PinStore
+    from panel_firewall.firewall.ui import serve_forever
     serve_forever(_ledger(a), a.port, a.who, PinStore(a.pin_file))
     return 0
 

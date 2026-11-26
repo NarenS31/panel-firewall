@@ -7,11 +7,11 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from panel_firewall.guard.check import check_reply  # noqa: E402
-from panel_firewall.guard.extract import extract_patterns  # noqa: E402
-from panel_firewall.guard.guard import GuardedBot  # noqa: E402
-from panel_firewall.guard.orders import JsonOrders, find_order_id  # noqa: E402
-from panel_firewall.guard.policy import PolicyError, load_policy  # noqa: E402
+from panel_firewall.guard.check import check_reply
+from panel_firewall.guard.extract import extract_patterns
+from panel_firewall.guard.guard import GuardedBot
+from panel_firewall.guard.orders import JsonOrders, find_order_id
+from panel_firewall.guard.policy import PolicyError, load_policy
 
 POLICY = load_policy(ROOT / "guard_data/policy_fictional_store.toml")
 ORDERS = JsonOrders(ROOT / "guard_data/orders_fictional.json")

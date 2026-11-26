@@ -8,13 +8,21 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from panel_firewall.firewall.connector import Connector
 from panel_firewall.firewall.ledger import Ledger, approval_id
 from panel_firewall.firewall.policy import LedgerState, Policy, window_needed
 from panel_firewall.firewall.receipts import Signer, make_receipt
-from panel_firewall.firewall.types import (ALLOW, BLOCK, NEEDS_CONSENT, Action, FirewallError, Result, Verdict)
+from panel_firewall.firewall.types import (
+    ALLOW,
+    BLOCK,
+    NEEDS_CONSENT,
+    Action,
+    FirewallError,
+    Result,
+    Verdict,
+)
 
 log = logging.getLogger("panel_firewall.firewall")
 

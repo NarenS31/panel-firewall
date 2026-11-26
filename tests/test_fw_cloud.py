@@ -7,13 +7,19 @@ import time
 
 import httpx
 import pytest
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from panel_firewall.firewall.cloud import CloudClient, CloudError, CloudState, CloudSync, PolicyManager, receipt_event
+from panel_firewall.firewall.cloud import (
+    CloudClient,
+    CloudError,
+    CloudState,
+    CloudSync,
+    PolicyManager,
+    receipt_event,
+)
 from panel_firewall.firewall.engine import Firewall
 from panel_firewall.firewall.ledger import Ledger
-from panel_firewall.firewall.policy import load_policy
 from tests.fw_helpers import FakeConnector, act, signer
 
 WS = "ws_test_000001"

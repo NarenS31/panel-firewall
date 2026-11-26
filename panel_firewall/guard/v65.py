@@ -30,7 +30,14 @@ from datetime import date
 
 from panel_firewall.guard.policy import Policy
 from panel_firewall.guard.v5 import sentences
-from panel_firewall.guard.v63 import NEG_REQUEST, NO, TYPE_WORDS, asks_for, last_turn, offered
+from panel_firewall.guard.v63 import (
+    NEG_REQUEST,
+    NO,
+    TYPE_WORDS,
+    asks_for,
+    last_turn,
+    offered,
+)
 from panel_firewall.guard.v64 import evaluate_v64, explanations, instructions_v64
 
 V65_VERSION = "guard-v6.5-proxy"
@@ -39,22 +46,22 @@ HEDGE = re.compile(
     r"\b(?:maybe|might|perhaps|probably|possibly|not sure|unsure|undecided|haven'?t decided|let me (?:check|think|see|"
     r"ask|talk)|check with|talk to my|ask my|think (?:about|it over)|thinking about|get back to you|decide later|"
     r"later|for now|next time|not yet|what about|how about|if i\b|only if|hold off|wait|on second thought|"
-    r"i'?ll let you know|need to check)\b", re.I)
-POLITE_REQUEST = re.compile(r"^\s*(?:please\s+)?(?:can|could|would|will) you\b", re.I)
+    r"i'?ll let you know|need to check)\b", re.IGNORECASE)
+POLITE_REQUEST = re.compile(r"^\s*(?:please\s+)?(?:can|could|would|will) you\b", re.IGNORECASE)
 GO_WITH = re.compile(r"\b(?:let'?s go (?:with|ahead with)|i'?ll go (?:with|ahead with)|go ahead with|i'?ll take|"
-                     r"i'?d like to go with|i choose|i'?ll do)\b", re.I)
+                     r"i'?d like to go with|i choose|i'?ll do)\b", re.IGNORECASE)
 STRONG_YES = re.compile(
     r"^\s*(?:oh\s+)?(?:yes|yeah|yep|yup|sure|absolutely|definitely|perfect|great|that works|that'?s fine|"
     r"sounds (?:good|great|perfect)|go ahead|go for it|do it|please (?:do|go ahead)|let'?s (?:do|go)|"
     r"i'?ll (?:take|go with)|that would be (?:great|good|perfect|lovely|helpful)|i'?d like that|"
     r"(?:ok(?:ay)?|alright|all right)[,!.\s]+(?:let'?s|go|please|do|set|yes|sure|sounds|that works|i'?ll)|"
-    r"no (?:problem|worries)[,!.\s]+(?:go|please|do|set|that works|sounds|let'?s|yes|sure))\b", re.I)
+    r"no (?:problem|worries)[,!.\s]+(?:go|please|do|set|that works|sounds|let'?s|yes|sure))\b", re.IGNORECASE)
 # "no" about the action, not any "no"/"don't" ("They don't fit, so let's go with the exchange", "No problem, go ahead")
 REFUSE = re.compile(
     r"^\s*no\b(?!\s+(?:problem|worries))|\bno thanks\b|\bnot the\b|\bdon'?t (?:\w+\s+)?(?:go ahead|do (?:it|that|this)|"
-    r"bother|set|want (?:it|that|to)|need (?:it|that))\b", re.I)
-NOT_A_NO = re.compile(r"\bno (?:problem|worries)\b", re.I)
-BARE_OK = re.compile(r"^\s*(?:ok(?:ay)?|alright|all right|fine)(?:\s+then)?\s*[.!]*\s*$", re.I)
+    r"bother|set|want (?:it|that|to)|need (?:it|that))\b", re.IGNORECASE)
+NOT_A_NO = re.compile(r"\bno (?:problem|worries)\b", re.IGNORECASE)
+BARE_OK = re.compile(r"^\s*(?:ok(?:ay)?|alright|all right|fine)(?:\s+then)?\s*[.!]*\s*$", re.IGNORECASE)
 
 
 def _questions(msg: str) -> list[str]:
@@ -99,4 +106,4 @@ def evaluate_v65(raw: str, policy: Policy, order: dict | None, today: date, done
 
 instructions_v65 = instructions_v64
 
-__all__ = ["V65_VERSION", "consent_v65", "evaluate_v65", "instructions_v65", "hedged", "says_yes", "explanations"]
+__all__ = ["V65_VERSION", "consent_v65", "evaluate_v65", "explanations", "hedged", "instructions_v65", "says_yes"]

@@ -16,7 +16,6 @@ start without one. Keys written by earlier versions (PEM) are still read.
 from __future__ import annotations
 
 import base64
-import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -24,7 +23,13 @@ from cryptography.hazmat.primitives import serialization
 from tenthlook_core import crypto
 from tenthlook_core import receipt as core
 
-from panel_firewall.firewall.types import Action, FirewallError, Verdict, canonical, sha256_hex
+from panel_firewall.firewall.types import (
+    Action,
+    FirewallError,
+    Verdict,
+    canonical,
+    sha256_hex,
+)
 
 RECEIPT_VERSION = core.VERSION
 DEFAULT_KEY = "~/.config/panel/receipt_ed25519.pem"
@@ -61,14 +66,15 @@ class Signer:
     path: str
 
     @classmethod
-    def load(cls, path: str | Path | None) -> "Signer":
+    def load(cls, path: str | Path | None) -> Signer:
         p = Path(path or DEFAULT_KEY).expanduser()
         if not p.is_file():
             raise FirewallError(f"no signing key at {p}. Run `usepanel keygen` first (Panel has no default key and will not start without one).")
         try:
             raw = p.read_bytes()
             if raw.lstrip().startswith(b"-----BEGIN"):          # key from an earlier Panel version
-                import os, stat
+                import os
+                import stat
                 if stat.S_IMODE(os.stat(p).st_mode) & 0o077:
                     raise FirewallError(f"{p} is readable by others; run `chmod 600 {p}`")
                 seed = _pem_to_seed(raw)
@@ -127,7 +133,7 @@ def make_receipt(signer: Signer, action: Action, idem_key: str, policy_sha: str,
 
 def _iso(ts: float) -> str:
     import datetime as dt
-    return dt.datetime.fromtimestamp(ts, dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    return dt.datetime.fromtimestamp(ts, dt.UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
 def load_public_key(path: str | Path) -> str:

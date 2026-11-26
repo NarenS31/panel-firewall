@@ -4,9 +4,9 @@ from __future__ import annotations
 import re
 
 _PATTERNS = {
-    "int": re.compile(r"^\s*\**\s*ANSWER\s*:\s*\**\s*(-?[0-9][0-9,]*)\s*\**\s*\.?\s*$", re.I | re.M),
-    "choice": re.compile(r"^\s*\**\s*ANSWER\s*:\s*\**\s*\(?([AB])\)?\s*\**\s*\.?\s*$", re.I | re.M),
-    "yesno": re.compile(r"^\s*\**\s*ANSWER\s*:\s*\**\s*(YES|NO)\s*\**\s*\.?\s*$", re.I | re.M),
+    "int": re.compile(r"^\s*\**\s*ANSWER\s*:\s*\**\s*(-?[0-9][0-9,]*)\s*\**\s*\.?\s*$", re.IGNORECASE | re.MULTILINE),
+    "choice": re.compile(r"^\s*\**\s*ANSWER\s*:\s*\**\s*\(?([AB])\)?\s*\**\s*\.?\s*$", re.IGNORECASE | re.MULTILINE),
+    "yesno": re.compile(r"^\s*\**\s*ANSWER\s*:\s*\**\s*(YES|NO)\s*\**\s*\.?\s*$", re.IGNORECASE | re.MULTILINE),
 }
 
 

@@ -15,7 +15,13 @@ import httpx
 
 from panel_firewall.firewall.connector import Connector
 from panel_firewall.firewall.policy import Policy
-from panel_firewall.firewall.types import Action, ActionSchema, FirewallError, Result, sha256_hex
+from panel_firewall.firewall.types import (
+    Action,
+    ActionSchema,
+    FirewallError,
+    Result,
+    sha256_hex,
+)
 
 API = "https://api.stripe.com"
 PI_RE = re.compile(r"^(pi|ch)_[A-Za-z0-9]{6,60}$")

@@ -34,15 +34,18 @@ def native_connectors(policy: Policy) -> list:
             from panel_firewall.firewall.connectors.sqlite_db import SqliteConnector
             out.append(SqliteConnector(str((base / c["path"]).resolve()), policy))
         elif t == "stripe":
-            from panel_firewall.firewall.connectors.stripe import StripeConnector, load_key
+            from panel_firewall.firewall.connectors.stripe import (
+                StripeConnector,
+                load_key,
+            )
             out.append(StripeConnector(load_key()))
         elif t == "shopify":
             from panel_firewall.execute.executor import ShopifyBackend
+            from panel_firewall.firewall.connectors.shopify import ShopifyConnector
+            from panel_firewall.guard.policy import load_policy as load_store
             from panel_firewall.shopify.client import ShopifyClient
             from panel_firewall.shopify.config import Config
             from panel_firewall.shopify.orders import ShopifyOrders
-            from panel_firewall.guard.policy import load_policy as load_store
-            from panel_firewall.firewall.connectors.shopify import ShopifyConnector
             client = ShopifyClient(Config())
             sp = c.get("store_policy")
             out.append(ShopifyConnector(ShopifyBackend(client), ShopifyOrders(client), load_store(base / sp) if sp else None))

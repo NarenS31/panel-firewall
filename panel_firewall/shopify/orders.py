@@ -20,12 +20,12 @@ from __future__ import annotations
 
 import re
 import time
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 from panel_firewall.shopify.client import ShopifyClient
 
 # "order #1001", "#1001", "order 1001", "order number 1001". A bare number is never taken as an order id.
-SHOPIFY_ORDER_ID = re.compile(r"(?:#|\border\s*(?:number|no\.?|num\.?)?\s*#?\s*)(\d{3,10})\b", re.I)
+SHOPIFY_ORDER_ID = re.compile(r"(?:#|\border\s*(?:number|no\.?|num\.?)?\s*#?\s*)(\d{3,10})\b", re.IGNORECASE)
 
 ORDER_FIELDS = """
   id name test processedAt createdAt cancelledAt displayFinancialStatus
@@ -73,7 +73,7 @@ class ShopifyOrders:
 
     @property
     def today(self) -> date:
-        return self._today or datetime.now(timezone.utc).date()
+        return self._today or datetime.now(UTC).date()
 
     def get_order(self, order_id: str, fresh: bool = False) -> dict | None:
         digits = re.sub(r"\D", "", order_id or "")

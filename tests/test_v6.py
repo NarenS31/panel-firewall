@@ -7,8 +7,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from panel_firewall.guard.policy import load_policy  # noqa: E402
-from panel_firewall.guard.v6 import evaluate, fact_sentence_ok, instructions, policy_numbers, refusal_sentence_ok  # noqa: E402
+from panel_firewall.guard.policy import load_policy
+from panel_firewall.guard.v6 import (
+    evaluate,
+    fact_sentence_ok,
+    instructions,
+    policy_numbers,
+    refusal_sentence_ok,
+)
 
 P = load_policy(ROOT / "guard_data/policy_fictional_store.toml")
 TODAY = date(2026, 11, 12)

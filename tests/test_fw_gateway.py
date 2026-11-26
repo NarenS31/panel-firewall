@@ -1,8 +1,6 @@
 """MCP gateway against a deliberately awkward fake server: relay correctness, consent, idempotency, fail-closed."""
 import asyncio
-import json
 import sys
-import threading
 from pathlib import Path
 
 import pytest

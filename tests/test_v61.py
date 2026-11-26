@@ -1,7 +1,7 @@
 """v6.1 phantom hand-off rule (proxy only; v6.py stays frozen)."""
 import hashlib
-import re
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -11,12 +11,13 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from panel_firewall.guard import proxy as P  # noqa: E402
-from panel_firewall.guard.orders import JsonOrders  # noqa: E402
-from panel_firewall.guard.policy import load_policy  # noqa: E402
-from panel_firewall.guard.v6 import REFUSALS, TEMPLATES  # noqa: E402
-from panel_firewall.guard.v61 import phantom_handoff  # noqa: E402
-from test_proxy import KEY, MSGS, post, run  # noqa: E402,F401  (run is the proxy + fake-upstream fixture)
+from test_proxy import KEY, MSGS, post, run  # noqa: F401  (run is the proxy + fake-upstream fixture)
+
+from panel_firewall.guard import proxy as P
+from panel_firewall.guard.orders import JsonOrders
+from panel_firewall.guard.policy import load_policy
+from panel_firewall.guard.v6 import REFUSALS, TEMPLATES
+from panel_firewall.guard.v61 import phantom_handoff
 
 POLICY = load_policy(ROOT / "guard_data/policy_fictional_store.toml")
 ORDERS = ROOT / "guard_data/orders_fictional.json"

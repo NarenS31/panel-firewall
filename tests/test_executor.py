@@ -10,18 +10,16 @@ import urllib.request
 from datetime import date
 from pathlib import Path
 
-import pytest
-
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from panel_firewall.execute.approval_page import serve  # noqa: E402
-from panel_firewall.execute.executor import Executor, FakeBackend, Limits, action_key  # noqa: E402
-from panel_firewall.execute.handoff import LogNotifier, WebhookNotifier  # noqa: E402
-from panel_firewall.execute.store import ActionStore  # noqa: E402
-from panel_firewall.guard import proxy as P  # noqa: E402
-from panel_firewall.guard.policy import load_policy  # noqa: E402
-from panel_firewall.guard.v62 import PENDING  # noqa: E402
+from panel_firewall.execute.approval_page import serve
+from panel_firewall.execute.executor import Executor, FakeBackend, Limits, action_key
+from panel_firewall.execute.handoff import LogNotifier, WebhookNotifier
+from panel_firewall.execute.store import ActionStore
+from panel_firewall.guard import proxy as P
+from panel_firewall.guard.policy import load_policy
+from panel_firewall.guard.v62 import PENDING
 
 POLICY = load_policy(ROOT / "guard_data/policy_fictional_store.toml")
 HOOK_SECRET = "whsec-never-log-me"

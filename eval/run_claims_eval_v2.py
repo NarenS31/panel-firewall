@@ -14,9 +14,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "eval"))
-import run_eval as RE  # noqa: E402
-from panel_firewall.firewall.claims import _executed_receipts, check_reply  # noqa: E402
-from panel_firewall.firewall.receipts import generate_key, receipt_id  # noqa: E402
+import run_eval as RE
+
+from panel_firewall.firewall.claims import _executed_receipts, check_reply
+from panel_firewall.firewall.receipts import generate_key, receipt_id
 
 
 def world(item, keydir: Path):

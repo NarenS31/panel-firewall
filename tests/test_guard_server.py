@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from panel_firewall.guard import server  # noqa: E402
+from panel_firewall.guard import server
 
 
 class StubBot(BaseHTTPRequestHandler):

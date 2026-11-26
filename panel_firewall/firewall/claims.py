@@ -46,11 +46,11 @@ _AUX = r"(?:i(?:'ve| have)|we(?:'ve| have)|i|we)"
 _ADV = r"(?:(?:just|already|successfully|now|gone ahead and|went ahead and|also|finally)\s+)*"
 _PASSIVE = r"(?:(?:(?:has|have|had|was|were|is|are)|(?<=[a-z])'s|(?<=[a-z])'ve|(?<=[a-z])'re)\s+(?:now\s+|already\s+|successfully\s+|just\s+)*(?:been\s+)?)"
 GENERIC = re.compile(r"^(?:ok(?:ay)?[,!. ]+|great[,!. ]+|all\s+)?(?:done|set|finished|sorted|complete[d]?|taken care of|all set|"
-                     r"(?:it|that|this)(?:'s| is| has been| was)\s+(?:now\s+|all\s+)?(?:done|complete[d]?|finished|processed|taken care of|sorted))\b[\s.!]*$", re.I)
+                     r"(?:it|that|this)(?:'s| is| has been| was)\s+(?:now\s+|all\s+)?(?:done|complete[d]?|finished|processed|taken care of|sorted))\b[\s.!]*$", re.IGNORECASE)
 IRREALIS = re.compile(r"\b(?:can|could|may|might|will|would|shall|should|'ll|going to|gonna|able to|need(?:s)? to|must|let me|"
                       r"if|once|after|when|until|unless|whether|pending|awaiting|waiting|requires?|not yet|haven't|hasn't|have not|"
                       r"has not|hadn't|didn't|did not|wasn't|was not|weren't|isn't|aren't|unable|cannot|can't|couldn't|won't|never|"
-                      r"no longer|not been|not able|not)\b|n't\b|\?", re.I)
+                      r"no longer|not been|not able|not)\b|n't\b|\?", re.IGNORECASE)
 AMOUNT = re.compile(r"\$\s?(\d[\d,]*(?:\.\d{1,2})?)")
 
 
@@ -79,7 +79,7 @@ def _clauses(text: str) -> list[str]:
 
 
 def _family_rx():
-    return {fam: re.compile(rf"(?:{_AUX}\s+{_ADV}(?:{pat})\b)|(?:{_PASSIVE}(?:{pat})\b)|(?:\b(?:successfully|now)\s+(?:{pat})\b)", re.I)
+    return {fam: re.compile(rf"(?:{_AUX}\s+{_ADV}(?:{pat})\b)|(?:{_PASSIVE}(?:{pat})\b)|(?:\b(?:successfully|now)\s+(?:{pat})\b)", re.IGNORECASE)
             for fam, pat in VERBS.items()}
 
 
@@ -88,14 +88,14 @@ _RX = _family_rx()
 NOUNS = {"refund": "refund", "credit": "credit", "discount": "discount", "cancellation": "cancel", "deletion": "delete",
          "transfer": "transfer", "charge": "charge"}
 _NOUN_PASSIVE = re.compile(r"\b(" + "|".join(NOUNS) + r")\b[^.!?]*?\b(?:has|have|was|were|is|are|'s)\s+(?:now\s+|already\s+|successfully\s+|just\s+)*"
-                           r"(?:been\s+)?(?:processed|issued|completed|approved|applied|made|sent|finished|done)\b", re.I)
-_BARE_VERB = {fam: re.compile(rf"^(?:also\s+)?(?:{pat})\b", re.I) for fam, pat in VERBS.items()}
-_BARE_PASSIVE = {fam: re.compile(rf"\b(?:{pat})\b", re.I) for fam, pat in VERBS.items()}
+                           r"(?:been\s+)?(?:processed|issued|completed|approved|applied|made|sent|finished|done)\b", re.IGNORECASE)
+_BARE_VERB = {fam: re.compile(rf"^(?:also\s+)?(?:{pat})\b", re.IGNORECASE) for fam, pat in VERBS.items()}
+_BARE_PASSIVE = {fam: re.compile(rf"\b(?:{pat})\b", re.IGNORECASE) for fam, pat in VERBS.items()}
 
 
 def find_claims(reply: str) -> list[Claim]:
     claims: list[Claim] = []
-    reply = re.sub(r"\b(?:gone|went) ahead and\b", "just", reply, flags=re.I)
+    reply = re.sub(r"\b(?:gone|went) ahead and\b", "just", reply, flags=re.IGNORECASE)
     for sent in re.split(r"(?<=[.!?])\s+|\n+", reply):
         sent = sent.strip()
         if not sent:
@@ -203,7 +203,7 @@ def not_done_message(ledger: Ledger, conversation_id: str, terminal: list[str]) 
 # conversation and be an EXECUTED outcome; its tool family and amount must match what the sentence says. Detecting that a sentence
 # asserts an action is still lexical (below), so a miss there is the one way a false claim gets through: no phrasing can make an
 # uncited or wrongly cited assertion pass once it is noticed.
-CITE = re.compile(r"\brcpt_[0-9A-Za-z]+", re.I)
+CITE = re.compile(r"\brcpt_[0-9A-Za-z]+", re.IGNORECASE)
 _VALID_ID = re.compile(r"^rcpt_[0-9a-f]{12}$")
 
 # word prefix -> claim families; empty set = "an action happened" but the family is ambiguous (any valid cited receipt may back it)
@@ -222,24 +222,24 @@ _PART = (r"refunded|reimbursed|reversed|returned|rolled back|credited|topped up|
          r"created|recorded|logged|charged|billed|sent|emailed|transferred|moved|issued|applied|processed|completed|finished|handled|"
          r"fulfill?ed|resolved|settled|posted|submitted|approved|executed|finali[sz]ed|cleaned(?: up)?|fixed|released|granted|"
          r"given|gave|handed over|waived|paid out|squared away|sorted(?: out)?|taken care of|took care of|set (?:to|up)|(?<=ve )set|(?<=been )set|(?<=been )made|(?<=was )made|paid|ran")
-_PART_RX = re.compile(rf"\b(?:{_PART})\b", re.I)
+_PART_RX = re.compile(rf"\b(?:{_PART})\b", re.IGNORECASE)
 # result-state / idiom cues that assert an outcome without a participle
 _CUE_RX = re.compile(r"\b(?:went through|gone through|on (?:its|the) way(?: back)?|heading back|back (?:in|on|to) (?:your|the)|is gone|are gone|"
                      r"now (?:has|have|contains?|shows?|reads?|empty|free|gone|cancel+ed|closed)|(?:is|are) now\b|"
                      r"no longer (?:exists?|contains?|appears?|there|present|in the|in your|on file)|all set|good to go|"
-                     r"(?:is|are|was|were)\s+(?:now\s+)?(?:complete[d]?|done|finished|sorted)|complete[d]?|done)\b", re.I)
+                     r"(?:is|are|was|were)\s+(?:now\s+)?(?:complete[d]?|done|finished|sorted)|complete[d]?|done)\b", re.IGNORECASE)
 _SKIP = re.compile(r"\b(?:not|never|nothing|nobody|none|neither|nor|no one|zero|unable|declin\w+|denied|deny|refus\w+|reject\w+|"
                    r"blocked|fail\w*|prevent\w*|stopp\w+|escalat\w+|typically|usually|normally|generally|always|often|"
                    r"can|could|may|might|will|would|shall|should|going to|gonna|need(?:s)? to|must|let me|if|once|"
                    r"after|when|until|unless|whether|pending|awaiting|waiting|requires?|required|asked|ask|cannot|can\s?not|no|please|contact|"
                    r"reach out|have a human|to (?:complete|finish|process|handle|resolve|approve|proceed|authori[sz]e|issue|carry out|perform))\b"
-                   r"|n't\b|'ll\b|\?", re.I)
+                   r"|n't\b|'ll\b|\?", re.IGNORECASE)
 # citation phrasing ("recorded under receipt X") is not an action claim; read-only statements ("the query ran") are not action claims
-_CITE_VERB = re.compile(r"\b(?:recorded|logged|filed|noted|stored|saved|documented|tracked|registered)\b(?=\W+(?:\w+\W+){0,4}?(?:receipt|ref\b|reference))", re.I)
-_READ = re.compile(r"\b(?:quer(?:y|ies)|selects?|look(?:ed)? ?ups?|looked up|search(?:ed)?|count(?:ed)?|check(?:ed)?|retriev\w+|fetch\w*)\b", re.I)
-_WRITE = re.compile(r"\b(?:delet\w*|drop\w*|updat\w*|insert\w*|remov\w*|truncat\w*|cancel\w*|refund\w*|credit\w*|discount\w*|charg\w*|alter\w*|eras\w*|wip\w*|purg\w*|clear\w*)\b", re.I)
+_CITE_VERB = re.compile(r"\b(?:recorded|logged|filed|noted|stored|saved|documented|tracked|registered)\b(?=\W+(?:\w+\W+){0,4}?(?:receipt|ref\b|reference))", re.IGNORECASE)
+_READ = re.compile(r"\b(?:quer(?:y|ies)|selects?|look(?:ed)? ?ups?|looked up|search(?:ed)?|count(?:ed)?|check(?:ed)?|retriev\w+|fetch\w*)\b", re.IGNORECASE)
+_WRITE = re.compile(r"\b(?:delet\w*|drop\w*|updat\w*|insert\w*|remov\w*|truncat\w*|cancel\w*|refund\w*|credit\w*|discount\w*|charg\w*|alter\w*|eras\w*|wip\w*|purg\w*|clear\w*)\b", re.IGNORECASE)
 _QUOTED = re.compile(r'"[^"]*"|\u201c[^\u201d]*\u201d|\b\w+(?:-\w+)+\b')
-_RESULT_STATE = re.compile(r"\bno longer (?:exists?|contains?|appears?|there|present|in the|in your|on file)\b", re.I)
+_RESULT_STATE = re.compile(r"\bno longer (?:exists?|contains?|appears?|there|present|in the|in your|on file)\b", re.IGNORECASE)
 _SENT = re.compile(r"(?<=[.!?])\s+|\n+")
 
 
@@ -254,15 +254,15 @@ def _families_in(clause: str):
         for k, v in _FAM.items():
             if lw.startswith(k):
                 groups.append(set(v))
-    if re.search(r"\b(?:money|funds?|payment)\b[^.]*\b(?:back|returned|on (?:its|the) way)\b|\bback (?:in|on|to) (?:your|the)\b", clause, re.I):
+    if re.search(r"\b(?:money|funds?|payment)\b[^.]*\b(?:back|returned|on (?:its|the) way)\b|\bback (?:in|on|to) (?:your|the)\b", clause, re.IGNORECASE):
         groups.append({"refund"})
     return groups
 
 
 def find_assertions(reply: str) -> list[dict]:
     """Sentences that assert something happened: {i, text, families (empty = unknown), amounts}."""
-    reply = re.sub(r"\b(?:gone|went) ahead and\b", "just", reply, flags=re.I)
-    reply = re.sub(r"\b(?:i|we) can (?:confirm|assure you)(?: that)?\b", "", reply, flags=re.I)
+    reply = re.sub(r"\b(?:gone|went) ahead and\b", "just", reply, flags=re.IGNORECASE)
+    reply = re.sub(r"\b(?:i|we) can (?:confirm|assure you)(?: that)?\b", "", reply, flags=re.IGNORECASE)
     out = []
     for i, sent in enumerate(s.strip() for s in _SENT.split(reply) if s.strip()):
         groups: list[set[str]] = []

@@ -3,7 +3,6 @@ import json
 import os
 import stat
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -11,8 +10,7 @@ import yaml
 
 from panel_firewall.firewall.cli import main
 from panel_firewall.firewall.config import build_firewall
-from panel_firewall.firewall.ledger import Ledger
-from panel_firewall.firewall.pin import ApprovalGate, MAX_FAILURES, PinError, PinStore
+from panel_firewall.firewall.pin import MAX_FAILURES, ApprovalGate, PinError, PinStore
 from panel_firewall.firewall.types import Action
 from panel_firewall.firewall.ui import start_background
 from tests.fw_helpers import act, make_fw

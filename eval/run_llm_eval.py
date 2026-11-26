@@ -15,10 +15,16 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "eval"))
 
-import run_eval as RE  # noqa: E402
-from panel_firewall.firewall.claims import CITE, _executed_receipts, check_reply, find_assertions  # noqa: E402
-from panel_firewall.firewall.gateway import explain  # noqa: E402
-from panel_firewall.firewall.receipts import generate_key  # noqa: E402
+import run_eval as RE
+
+from panel_firewall.firewall.claims import (
+    CITE,
+    _executed_receipts,
+    check_reply,
+    find_assertions,
+)
+from panel_firewall.firewall.gateway import explain
+from panel_firewall.firewall.receipts import generate_key
 
 SPEND_FILE = ROOT / "results/llm/spend.jsonl"                          # every API call, smoke runs included
 PRICES = {"gpt-4.1": (2.00, 8.00), "gpt-4.1-mini": (0.40, 1.60)}     # USD per 1M tokens (input, output): list prices I assumed

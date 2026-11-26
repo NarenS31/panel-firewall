@@ -5,12 +5,10 @@ import glob
 import json
 import random
 import sys
-from collections import defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from panel_firewall.firewall.claims import find_assertions  # noqa: E402
 
 
 def load():

@@ -12,12 +12,18 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from panel_firewall.shopify import API_VERSION  # noqa: E402
-from panel_firewall.shopify.actions import UUID_RE, create_discount_code, create_refund, refund_transaction, shopify_key  # noqa: E402
-from panel_firewall.shopify.client import ShopifyClient, ShopifyError, TokenProvider  # noqa: E402
-from panel_firewall.shopify.config import Config, ConfigError  # noqa: E402
-from panel_firewall.shopify.orders import SHOPIFY_ORDER_ID, ShopifyOrders  # noqa: E402
-from panel_firewall.guard.orders import find_order_id  # noqa: E402
+from panel_firewall.guard.orders import find_order_id
+from panel_firewall.shopify import API_VERSION
+from panel_firewall.shopify.actions import (
+    UUID_RE,
+    create_discount_code,
+    create_refund,
+    refund_transaction,
+    shopify_key,
+)
+from panel_firewall.shopify.client import ShopifyClient, ShopifyError, TokenProvider
+from panel_firewall.shopify.config import Config, ConfigError
+from panel_firewall.shopify.orders import SHOPIFY_ORDER_ID, ShopifyOrders
 
 SECRET = "shpss_TEST-CLIENT-SECRET-never-log-me"
 TOKEN = "shpat_TEST-ACCESS-TOKEN-never-log-me"
@@ -233,6 +239,7 @@ def test_dev_store_demo_script_end_to_end_against_mock(monkeypatch, tmp_path, ca
     """The step-by-step dev-store script, with the network replaced by FakeShopify and the typed answers scripted."""
     import importlib.util
     from datetime import date, timedelta
+
     import panel_firewall.shopify.client as C
     today = (date.today() - timedelta(days=1)).isoformat() + "T10:00:00Z"
     fake = FakeShopify(orders={"1001": order_node(processed=today)})

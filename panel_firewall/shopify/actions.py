@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from panel_firewall.shopify.client import ShopifyClient, ShopifyError
 
@@ -81,7 +81,7 @@ def create_refund(client: ShopifyClient, order: dict, amount: float, idem_key: s
 
 def create_discount_code(client: ShopifyClient, order: dict, percent: float, code: str, days_valid: int = 90,
                          now: datetime | None = None) -> dict:
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     data = client.graphql(DISCOUNT, {"d": {
         "title": f"Panel {percent:g}% for order {order.get('order_id')}", "code": code,
         "startsAt": now.isoformat(), "endsAt": (now + timedelta(days=days_valid)).isoformat(),

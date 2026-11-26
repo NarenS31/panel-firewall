@@ -56,7 +56,7 @@ REFUSALS = [
 TOPIC = re.compile(
     r"refund|money back|reimburs|\breturn|discount|%|percent|coupon|promo|\bcode\b|credit|voucher|gift ?card|compensat|"
     r"\bfree\b|shipping|exception|waive|\brules?\b|polic(?:y|ies)|fault|liab|responsib|admit|defect|exchange|swap|replac|"
-    r"eligib|approv|receipt|\bwindow\b|\$\s?\d|\bcover\b|\bpay\b", re.I)
+    r"eligib|approv|receipt|\bwindow\b|\$\s?\d|\bcover\b|\bpay\b", re.IGNORECASE)
 
 
 def _norm(s: str) -> str:

@@ -6,9 +6,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from panel_firewall.guard.orders import JsonOrders  # noqa: E402
-from panel_firewall.guard.policy import load_policy  # noqa: E402
-from panel_firewall.guard.v5 import GuardedBotV5, evaluate, render  # noqa: E402
+from panel_firewall.guard.orders import JsonOrders
+from panel_firewall.guard.policy import load_policy
+from panel_firewall.guard.v5 import GuardedBotV5, evaluate, render
 
 POLICY = load_policy(ROOT / "guard_data/policy_fictional_store.toml")
 ORDERS = JsonOrders(ROOT / "guard_data/orders_fictional.json")

@@ -6,7 +6,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from panel_firewall.guard import prove_hosted as H  # noqa: E402
+from panel_firewall.guard import prove_hosted as H
 
 
 class Fake:

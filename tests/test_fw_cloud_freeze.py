@@ -6,11 +6,16 @@ import httpx
 import pytest
 from tenthlook_core import receipt as core
 
-from panel_firewall.firewall.cloud import CloudClient, CloudState, CloudSync, PolicyManager
+from panel_firewall.firewall.cloud import (
+    CloudClient,
+    CloudState,
+    CloudSync,
+    PolicyManager,
+)
 from panel_firewall.firewall.engine import Firewall
 from panel_firewall.firewall.ledger import Ledger
 from panel_firewall.firewall.policy import parse_policy
-from tests.fw_helpers import FakeConnector, POLICY_SHA, act, signer
+from tests.fw_helpers import POLICY_SHA, FakeConnector, act, signer
 from tests.test_fw_cloud import FakeCloud, b64
 
 

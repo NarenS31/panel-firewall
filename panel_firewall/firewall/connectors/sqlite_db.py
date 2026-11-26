@@ -6,7 +6,7 @@ from pathlib import Path
 
 from panel_firewall.firewall import sqlguard
 from panel_firewall.firewall.connector import Connector
-from panel_firewall.firewall.policy import LedgerState, Policy
+from panel_firewall.firewall.policy import Policy
 from panel_firewall.firewall.types import Action, ActionSchema, Result, sha256_hex
 
 MAX_OUTPUT_ROWS = 200

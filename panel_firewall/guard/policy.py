@@ -6,7 +6,6 @@ graph, so what is enforced is exactly what is in the graph.
 """
 from __future__ import annotations
 
-import sys
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path

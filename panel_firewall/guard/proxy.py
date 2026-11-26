@@ -46,8 +46,14 @@ from pathlib import Path
 from panel_firewall.guard.orders import ORDER_ID, JsonOrders, OrderLookup, find_order_id
 from panel_firewall.guard.policy import Policy, load_policy
 from panel_firewall.guard.v6 import TEMPLATES
+from panel_firewall.guard.v62 import (
+    compose,
+    confirmation,
+    evaluate_v62,
+    executed_before,
+    fallback_v62,
+)
 from panel_firewall.guard.v65 import V65_VERSION, evaluate_v65, instructions_v65
-from panel_firewall.guard.v62 import V62_VERSION, compose, confirmation, evaluate_v62, executed_before, fallback_v62, instructions_v62
 
 MAX_RETRIES = 2  # same as GuardedBotV6
 FORWARD_HEADERS = ("Authorization", "OpenAI-Organization", "OpenAI-Project", "x-api-key", "anthropic-version")

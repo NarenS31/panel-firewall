@@ -35,7 +35,7 @@ HANDOFF = re.compile("|".join([
     r"\b(?:will|'ll)\s+(?:be (?:in touch|contacting|reaching out)|contact you|reach out|get back to you|"
     r"follow up with you|call you|email you)\b",
     r"\b(?:is|are) (?:now )?(?:reviewing|looking into|handling) (?:your|this|the)\b",
-]), re.I)
+]), re.IGNORECASE)
 
 
 # An offer leaves the choice to the customer: "I can pass your request to a team member, who will contact you",
@@ -45,9 +45,9 @@ OFFER_OPEN = re.compile(
     r"^(?:(?:sure|absolutely|of course|yes|okay|ok)[,!.]?\s+)?(?:(?:but|and|or|also)\s+)?"
     r"(?:(?:if you(?:'d| would) like|if you want|if you prefer|if that helps|if you wish)[,]?\s+)?"
     r"(?:(?:i|we)\s+(?:can|could|(?:would|'d) be happy to|(?:am|'m|are|'re) happy to|(?:am|'m|are|'re) able to)\b"
-    r"|(?:would|do) you (?:like|want) (?:me|us) to\b|shall (?:i|we)\b|should (?:i|we)\b|want me to\b)", re.I)
+    r"|(?:would|do) you (?:like|want) (?:me|us) to\b|shall (?:i|we)\b|should (?:i|we)\b|want me to\b)", re.IGNORECASE)
 DONE_MARK = re.compile(r"\b(?:i'?ve|we'?ve|i have|we have|has been|have been|already|is now|are now|passed|"
-                       r"escalated|forwarded|transferred|referred|handed|connected|flagged|raised)\b", re.I)
+                       r"escalated|forwarded|transferred|referred|handed|connected|flagged|raised)\b", re.IGNORECASE)
 
 
 def is_offer(s: str) -> bool:

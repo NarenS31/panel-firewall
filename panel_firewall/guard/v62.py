@@ -28,7 +28,13 @@ from datetime import date
 
 from panel_firewall.guard.policy import Policy
 from panel_firewall.guard.v5 import REFUSALS, _norm, sentences
-from panel_firewall.guard.v6 import TEMPLATES, evaluate, instructions, refusal_sentence_ok, render
+from panel_firewall.guard.v6 import (
+    TEMPLATES,
+    evaluate,
+    instructions,
+    refusal_sentence_ok,
+    render,
+)
 from panel_firewall.guard.v61 import HANDOFF, is_offer, phantom_handoff, phantom_issue
 
 V62_VERSION = "guard-v6.2-proxy"
@@ -53,7 +59,7 @@ def _sentence_rx(tmpl: str) -> re.Pattern:
     s = s.replace(re.escape("{amount:.2f}"), r"(?P<amount>\d+(?:\.\d+)?)")
     s = s.replace(re.escape("{percent:g}"), r"(?P<percent>\d+(?:\.\d+)?)")
     s = s.replace(re.escape("{order}"), r"(?P<order>#?[A-Za-z0-9-]+)")
-    return re.compile(s, re.I)
+    return re.compile(s, re.IGNORECASE)
 
 
 SENT_RX = {t: [_sentence_rx(x) for x in sentences(TEMPLATES[t])] for t in TEMPLATES}
@@ -129,7 +135,7 @@ def evaluate_v62(raw: str, policy: Policy, order: dict | None, today: date, done
 
 
 _HANDOFF_WORDS = re.compile(r"\b(?:member of (?:our|the) (?:\w+ )?team|team members?|our (?:\w+ )?team|the team|"
-                            r"a (?:real )?person|a human|supervisor|manager|specialist|representative)\b", re.I)
+                            r"a (?:real )?person|a human|supervisor|manager|specialist|representative)\b", re.IGNORECASE)
 
 
 def _states_handoff(s: str) -> bool:

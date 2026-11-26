@@ -17,15 +17,16 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "eval"))
 
-import run_eval as E  # noqa: E402
-from panel_firewall.firewall.connectors.shopify import ShopifyConnector  # noqa: E402
-from panel_firewall.firewall.connectors.sqlite_db import SqliteConnector  # noqa: E402
-from panel_firewall.firewall.engine import Firewall  # noqa: E402
-from panel_firewall.firewall.ledger import Ledger  # noqa: E402
-from panel_firewall.firewall.policy import LedgerState, load_policy  # noqa: E402
-from panel_firewall.firewall.receipts import Signer, generate_key  # noqa: E402
-from panel_firewall.firewall.types import Action  # noqa: E402
-from panel_firewall.guard.policy import load_policy as load_store_policy  # noqa: E402
+import run_eval as E
+
+from panel_firewall.firewall.connectors.shopify import ShopifyConnector
+from panel_firewall.firewall.connectors.sqlite_db import SqliteConnector
+from panel_firewall.firewall.engine import Firewall
+from panel_firewall.firewall.ledger import Ledger
+from panel_firewall.firewall.policy import LedgerState, load_policy
+from panel_firewall.firewall.receipts import Signer, generate_key
+from panel_firewall.firewall.types import Action
+from panel_firewall.guard.policy import load_policy as load_store_policy
 
 
 def sh(cmd: str) -> str:
@@ -86,7 +87,8 @@ def main():
         all_ns += ns
     out["validate"]["all_3000"] = stats(all_ns)
     # full pipeline
-    from tests.fw_helpers import FakeConnector, policy as mkpolicy
+    from tests.fw_helpers import FakeConnector
+    from tests.fw_helpers import policy as mkpolicy
     fpol = mkpolicy({"fake.pay": {"max_amount": 10**9, "consent_over_amount": 10**9}})
     fw = Firewall(fpol, Ledger(tmp / "lat.sqlite"), Signer.load(key), [FakeConnector()], mode="auto")
     ns = []

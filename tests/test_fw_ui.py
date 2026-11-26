@@ -5,10 +5,10 @@ import urllib.request
 
 import pytest
 
+from panel_firewall.firewall.pin import PinStore
 from panel_firewall.firewall.types import FirewallError
 from panel_firewall.firewall.ui import make_server, start_background
 from tests.fw_helpers import act, make_fw
-from panel_firewall.firewall.pin import PinStore
 
 PIN = "correct horse"
 
