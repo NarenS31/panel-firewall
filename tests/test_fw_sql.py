@@ -6,7 +6,6 @@ import pytest
 from panel_firewall.firewall import sqlguard
 from panel_firewall.firewall.connectors.sqlite_db import SqliteConnector
 from panel_firewall.firewall.types import Action
-from tests.fw_helpers import make_fw
 
 RULE = {"max_rows": 3, "consent_over_rows": 1}
 SQL_CFG = {"protected_tables": ["secrets", "audit_log"]}
@@ -24,9 +23,9 @@ def db(tmp_path):
 
 
 def fw_for(db, rule=None, mode="auto", **top):
-    from tests.fw_helpers import policy, signer
     from panel_firewall.firewall.engine import Firewall
     from panel_firewall.firewall.ledger import Ledger
+    from tests.fw_helpers import policy, signer
     pol = policy({"sql.query": rule or RULE}, mode, sql=SQL_CFG, **top)
     return Firewall(pol, Ledger(), signer(), [SqliteConnector(db, pol)], mode=mode)
 
@@ -199,3 +198,29 @@ def test_cte_is_kept_in_the_row_count(db):
     a = sqlguard.analyze("WITH x AS (SELECT id FROM users) DELETE FROM users WHERE id IN (SELECT id FROM x)", None,
                          lambda q: sqlite3.connect(db).execute(q).fetchone()[0])
     assert a.rows == 5 and not a.block
+
+
+# --------------------------------------------------------------------------- consent_sql_kinds
+def test_consent_sql_kinds_holds_one_row_delete_then_runs_after_approval(db):
+    fw = fw_for(db, {"max_rows": 100, "consent_over_rows": 10, "consent_sql_kinds": ["delete"]})
+    o = q(fw, "DELETE FROM users WHERE id=1")
+    assert o.status == "needs_consent" and len(fw.ledger.pending()) == 1
+    assert rows(db, "SELECT COUNT(*) FROM users") == [(5,)]
+    assert fw.ledger.approve(o.approval_id, "me")[0]
+    assert q(fw, "DELETE FROM users WHERE id=1").status == "executed"
+    assert rows(db, "SELECT COUNT(*) FROM users") == [(4,)]
+
+
+def test_consent_sql_kinds_is_opt_in_and_keeps_blocks(db):
+    assert q(fw_for(db, {"max_rows": 100, "consent_over_rows": 10}), "DELETE FROM users WHERE id=1").status == "executed"
+    fw = fw_for(db, {"max_rows": 100, "consent_sql_kinds": ["delete"]})
+    assert q(fw, "DELETE FROM users").status == "blocked"
+    assert q(fw, "SELECT * FROM users").status == "executed"
+
+
+def test_consent_sql_kinds_validated():
+    from panel_firewall.firewall.policy import parse_policy
+    from panel_firewall.firewall.types import FirewallError
+    for bad in ("delete", [], ["drop"]):
+        with pytest.raises(FirewallError):
+            parse_policy({"actions": {"t": {"consent_sql_kinds": bad}}})

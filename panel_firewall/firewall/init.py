@@ -10,7 +10,6 @@ import asyncio
 import json
 import re
 import socket
-import sys
 from pathlib import Path
 
 from panel_firewall.firewall.types import FirewallError
@@ -84,6 +83,7 @@ def render(classified: list[dict], upstream_cmd: list[str]) -> str:
         if c.get("sql_arg"):
             L.append(f"    sql_arg: {c['sql_arg']}   # SQL is parsed (sqlglot AST): DROP/ALTER/TRUNCATE, multi-statement, no-WHERE blocked")
             if r != "read":
+                L.append("    consent_sql_kinds: [delete]   # a human approves every DELETE, even one row")
                 L.append("    max_rows: 10   # REVIEW: needs `database:` at the top so Panel can count rows first")
         if c.get("path_args"):
             L.append(f"    path_args: {json.dumps(c['path_args'])}")

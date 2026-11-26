@@ -20,6 +20,8 @@ Rule keys (all optional except where noted), per action name under `actions:`:
   max_total_amount: {amount: n, per_seconds: s}   executed total + this amount > n -> block
   duplicate_guard: {field: str, within_seconds: s}   a second EXECUTED action of this tool with the same value in `field`
                            (for example order_id) inside the window -> needs_consent (a human may approve it). A missing field blocks.
+  consent_sql_kinds: [..]  parsed SQL statement kinds (select, insert, update, delete) that always need a human, however few
+                           rows they touch. Opt-in; a statement the guard blocks stays blocked.
   sql: {...}               SQL guard settings (see sqlguard.py)
 
 Top-level (optional): circuit_breaker: {blocks: 3, per_seconds: 60}   N enforced blocks inside T seconds freeze every non-read tool
@@ -35,12 +37,23 @@ from pathlib import Path
 
 import yaml
 
-from panel_firewall.firewall.types import ALLOW, BLOCK, ENFORCE_MODES, FirewallError, NEEDS_CONSENT, MODES, Action, Verdict, sha256_hex
+from panel_firewall.firewall.types import (
+    ALLOW,
+    BLOCK,
+    ENFORCE_MODES,
+    MODES,
+    NEEDS_CONSENT,
+    Action,
+    FirewallError,
+    Verdict,
+    sha256_hex,
+)
 
+SQL_KINDS = {"select", "insert", "update", "delete"}
 OPS = ("eq", "ne", "gt", "gte", "lt", "lte", "in", "contains", "matches")
 RULE_KEYS = {"allowed", "risk", "required_fields", "amount_field", "max_amount", "consent_over_amount", "max_rows",
              "consent_over_rows", "protected", "consent_if", "block_if", "rate_limit", "max_total_amount", "sql",
-             "path_args", "allowed_roots", "sql_arg", "note", "duplicate_guard"}
+             "path_args", "allowed_roots", "sql_arg", "note", "duplicate_guard", "consent_sql_kinds"}
 TOP_KEYS = {"version", "name", "mode", "reviewed", "receipts", "actions", "sql", "consent_wait_seconds", "database",
             "session", "ledger", "connectors", "enforce_mode", "circuit_breaker"}
 
@@ -98,6 +111,9 @@ def parse_policy(raw: dict, sha: str = "") -> Policy:
             if k in rule and (isinstance(rule[k], bool) or not isinstance(rule[k], (int, float))
                               or not math.isfinite(rule[k]) or rule[k] < 0):
                 raise FirewallError(f"policy: actions.{name}.{k} must be a non-negative number")
+        sk = rule.get("consent_sql_kinds")
+        if sk is not None and not (isinstance(sk, list) and sk and all(isinstance(x, str) and x.lower() in SQL_KINDS for x in sk)):
+            raise FirewallError(f"policy: actions.{name}.consent_sql_kinds must be a non-empty list drawn from {sorted(SQL_KINDS)}")
         for k in ("consent_if", "block_if"):
             for c in rule.get(k, []):
                 if not isinstance(c, dict) or c.get("op") not in OPS or "field" not in c:
@@ -219,6 +235,9 @@ def evaluate(action: Action, rule: dict | None, facts: dict, state: LedgerState,
                     consent.append(f"cannot evaluate condition on '{c['field']}'; asking a human")
             elif r:
                 bucket.append(f"{label}: {c['field']} {c['op']} {c.get('value')!r}")
+    kinds = {str(k).lower() for k in rule.get("consent_sql_kinds", [])}
+    if kinds and facts.get("sql_kind") in kinds:
+        consent.append(f"{str(facts['sql_kind']).upper()} statements need approval by policy; a human must approve")
     dg = rule.get("duplicate_guard")
     if dg:
         if args.get(dg["field"]) in (None, ""):
