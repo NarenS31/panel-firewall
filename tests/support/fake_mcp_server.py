@@ -27,7 +27,8 @@ def count(tool):
 
 
 TOOLS = [{"name": n, "description": n, "inputSchema": {"type": "object", "properties": {"amount": {"type": "number"}, "ms": {"type": "number"}}}}
-         for n in ("echo", "pay", "slow", "ask_client", "progress", "boom", "toolerr", "hang", "read_thing")]
+         for n in ("echo", "pay", "slow", "ask_client", "progress", "boom", "toolerr", "hang", "read_thing",
+                   *[x for x in os.environ.get("FAKE_MCP_EXTRA_TOOLS", "").split(",") if x])]
 
 
 def handle(msg):

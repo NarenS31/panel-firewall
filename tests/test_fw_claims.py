@@ -228,3 +228,70 @@ def test_v2_verb_alternatives_and_new_verbs(world):
     o = run(world, "shopify.refund", order_id="#1001", amount=30)
     assert o.status == "executed"
     assert rchk(world, f"Refund done and recorded under receipt {_rid(o)}.").ok
+
+
+# ------------------------------------------------------------------------------------------------ idioms and false positives
+IDIOMS = [
+    "It's been dealt with.", "I dealt with it this morning.", "That's all been taken care of.", "I pushed it through.",
+    "I went ahead and did that for you.", "You're all set.", "Everything is good to go.", "It's sorted.", "I handled it.",
+    "I processed it just now.", "I got it done.", "I wrapped up the cancellation.", "It's all squared away.", "I took care of it.",
+]
+
+
+@pytest.mark.parametrize("text", IDIOMS)
+def test_idiom_claims_are_detected(text):
+    from panel_firewall.firewall.claims import find_assertions
+    assert find_assertions(text), text
+
+
+@pytest.mark.parametrize("text", IDIOMS)
+def test_idiom_claims_without_a_receipt_are_rewritten(world, text):
+    assert not rchk(world, text).ok, text
+
+
+def test_idiom_claim_with_a_matching_receipt_is_allowed(world):
+    o = run(world, "shopify.refund", order_id="#1001", amount=30)
+    assert o.status == "executed"
+    assert rchk(world, f"I dealt with it and pushed the refund through (receipt {_rid(o)}).").ok
+
+
+@pytest.mark.parametrize("text", [
+    "I'll get it dealt with once a manager approves.", "It can't be dealt with until someone approves it.", "Should I go ahead and handle it?",
+    "Would you like me to push it through?", "Once approved I'll get it sorted.", "It has not been taken care of yet.",
+    "I haven't handled it, a person needs to approve it first.", "If it's all set on your side, let me know.",
+    "Nothing has been wrapped up.", "I'm not able to push it through without approval.",
+])
+def test_idiom_wording_in_plans_questions_and_negations_is_not_a_claim(text):
+    from panel_firewall.firewall.claims import find_assertions
+    assert find_assertions(text) == [], text
+
+
+@pytest.mark.parametrize("text", [
+    "I ran into an error while trying that and the operation did not go through.",
+    "We ran into a problem and the refund could not be completed.",
+    "I ran across two orders with that name, which one do you mean?",
+    "The store ran out of stock of that item.",
+])
+def test_false_positive_ran_into_is_not_a_claim(text):
+    from panel_firewall.firewall.claims import find_assertions
+    assert find_assertions(text) == [], text
+
+
+def test_ran_as_an_action_verb_still_counts():
+    from panel_firewall.firewall.claims import find_assertions
+    assert find_assertions("I ran the refund.")
+
+
+def test_recorded_as_or_under_an_id_is_citation_wording_not_a_new_claim(world):
+    o = run(world, "shopify.refund", order_id="#1001", amount=30)
+    rid = _rid(o)
+    assert rchk(world, f"The refund has gone through and is recorded as {rid}.").ok
+    assert rchk(world, f"Done. One refund of $30 issued, recorded under {rid}.").ok
+    assert not rchk(world, "The refund has gone through and is recorded as rcpt_000000000000.").ok       # a made-up id still fails
+    assert not rchk(world, "The refund has gone through and is recorded.").ok
+
+
+def test_closing_quote_ends_the_sentence_so_a_following_closer_cannot_hide_a_claim():
+    from panel_firewall.firewall.claims import find_assertions
+    t = 'User 1\'s tier has been updated with the value "always-true OR." Let me know if you need anything else.'
+    assert find_assertions(t), "the claim must not be swallowed by the 'let me know' closer in the next sentence"

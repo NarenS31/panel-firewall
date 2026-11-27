@@ -44,6 +44,15 @@ usepanel doctor                            # checks the setup and says where the
 The key is saved to `~/.config/usepanel/cloud.json` (`$XDG_CONFIG_HOME/usepanel/` if set, or `$PANEL_CONFIG_DIR`), mode 0600 in a 0700 directory, and is never printed. Running a new setup command replaces it.
 *Manual alternative:* create a key in the dashboard and pass `--cloud-url https://app.usepanel.dev --api-key-file key.txt`, or set `PANEL_API_KEY`. `--api-key`, `--api-key-file` and `PANEL_API_KEY` always override the saved key, and the saved key is only ever sent to the cloud URL it was issued for.
 
+**Inspect an MCP server without setup:**
+
+```sh
+usepanel audit -- npx -y @modelcontextprotocol/server-filesystem /srv/data
+usepanel audit --policy policy.yaml --out starter.yaml -- <your-mcp-server-command>
+```
+
+`audit` starts the server and reads its tool definitions, without invoking tools or requiring keys, a PIN, or a policy. It flags missing SQL, deletion, amount and path controls, then prints a starter policy (or writes a new `--out` file). This is a heuristic over advertised definitions, not a review of upstream implementation guards. Review the draft before enforcement.
+
 **Local policy only (no cloud):**
 ```bash
 pip install panel-firewall
@@ -141,7 +150,7 @@ Latency (Apple M4, loaded machine): policy `validate` median 0.01 ms (Shopify/St
 ## Limits
 - **Consent is protected by a PIN and the OS user, not a hardware boundary.** The approval PIN stops an agent from running `usepanel approve` or calling the UI without it, but an agent with a shell as the same OS user can still edit the ledger or the PIN file. See "Security model". Stronger: run the agent as a separate OS user or container, or approve from another device.
 - **Only guards what is routed through it.** An agent with another path (shell, second MCP server, browser) bypasses Panel.
-- **The claim blocker is keyword-based and English-only**; it misses idioms ("dealt with", "pushed it through") and does not check counts. See [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
+- **The claim blocker is keyword-based and English-only**; it misses some idioms ("took the order off", "carried out", "went out") and does not check counts. See [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
 - **Sandbox only.** Stripe refuses non-`sk_test_` keys; Shopify is for development stores; the Stripe connector has only run against a mock transport, the Shopify connector against fakes (plus one recorded dev-store refund for the older executor).
 - **Small, same-author evidence.** One or two models, 20-conversation sets, labels made by an AI agent (second labels from another AI, no human), customers simulated by scripts. "0 in 60" has an upper 95% bound of about 5%.
 - **No formal verification.** A receipt proves what Panel checked and that the record was not altered, not that the action was a good idea.

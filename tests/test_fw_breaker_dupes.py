@@ -57,7 +57,6 @@ def test_missing_order_id_blocks_and_number_ids_work():
 
 
 def test_the_guard_is_per_tool_and_ignores_attempts_that_did_not_execute():
-    acts = {**REFUND, "fake.pay2": {}}
     fw = make_fw({"fake.pay": {"amount_field": "amount", "max_amount": 50, "duplicate_guard": {"field": "order_id", "within_seconds": DAY}}, "fake.read": {"risk": "read"}})
     assert fw.handle(act(amount=500, order_id="Z")).status == "blocked"            # blocked: never executed
     assert fw.handle(act(amount=40, order_id="Z")).status == "executed"            # so this is the first real refund

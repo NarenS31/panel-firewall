@@ -81,3 +81,16 @@ def test_token_and_host_header_required():
 def test_page_never_uses_innerhtml_for_ledger_text():
     from panel_firewall.firewall.ui import PAGE
     assert "innerHTML" not in PAGE and "textContent" in PAGE
+
+
+def test_activity_feed_names_who_approved_and_who_denied(tmp_path):
+    fw = make_fw(); srv = start_background(fw.ledger, 0, "ui-human", pin_store(tmp_path))
+    try:
+        a = fw.handle(act(amount=75, key="ka")); d = fw.handle(act(amount=76, key="kd"))
+        assert req(srv, f"/api/approve/{a.approval_id}", "POST", body={"pin": PIN, "who": "dana"})[0] == 200
+        assert req(srv, f"/api/deny/{d.approval_id}", "POST", body={"who": "lee", "pin": PIN})[0] == 200
+        ev = {e["event"]: e for e in req(srv, "/api/feed")[1]["events"] if e["event"] in ("approved", "denied")}
+        assert ev["approved"]["data"]["who"] == "dana" and ev["approved"]["data"]["pin_verified"] is True
+        assert ev["denied"]["data"]["who"] == "lee"
+    finally:
+        srv.shutdown()

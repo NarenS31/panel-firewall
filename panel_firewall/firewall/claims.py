@@ -221,12 +221,13 @@ _PART = (r"refunded|reimbursed|reversed|returned|rolled back|credited|topped up|
          r"emptied|truncated|zeroed(?: out)?|taken off|cancel+ed|voided|updated|changed|modified|edited|renamed|altered|inserted|added|"
          r"created|recorded|logged|charged|billed|sent|emailed|transferred|moved|issued|applied|processed|completed|finished|handled|"
          r"fulfill?ed|resolved|settled|posted|submitted|approved|executed|finali[sz]ed|cleaned(?: up)?|fixed|released|granted|"
-         r"given|gave|handed over|waived|paid out|squared away|sorted(?: out)?|taken care of|took care of|set (?:to|up)|(?<=ve )set|(?<=been )set|(?<=been )made|(?<=was )made|paid|ran")
+         r"given|gave|handed over|waived|paid out|squared away|sorted(?: out)?|taken care of|took care of|dealt with|wrapped up|set (?:to|up)|(?<=ve )set|(?<=been )set|(?<=been )made|(?<=was )made|paid|ran(?! (?:into|across|out|late|short|over|through)\b)")
 _PART_RX = re.compile(rf"\b(?:{_PART})\b", re.IGNORECASE)
 # result-state / idiom cues that assert an outcome without a participle
 _CUE_RX = re.compile(r"\b(?:went through|gone through|on (?:its|the) way(?: back)?|heading back|back (?:in|on|to) (?:your|the)|is gone|are gone|"
                      r"now (?:has|have|contains?|shows?|reads?|empty|free|gone|cancel+ed|closed)|(?:is|are) now\b|"
                      r"no longer (?:exists?|contains?|appears?|there|present|in the|in your|on file)|all set|good to go|"
+                     r"(?:went|gone) ahead|pushed\b(?:\s+[\w$.,#-]+){0,4}?\s+through|got\s+(?:it|that|this|everything|them|all of it)(?:\s+all)?\s+(?:done|sorted|handled|finished)|"
                      r"(?:is|are|was|were)\s+(?:now\s+)?(?:complete[d]?|done|finished|sorted)|complete[d]?|done)\b", re.IGNORECASE)
 _SKIP = re.compile(r"\b(?:not|never|nothing|nobody|none|neither|nor|no one|zero|unable|declin\w+|denied|deny|refus\w+|reject\w+|"
                    r"blocked|fail\w*|prevent\w*|stopp\w+|escalat\w+|typically|usually|normally|generally|always|often|"
@@ -235,12 +236,12 @@ _SKIP = re.compile(r"\b(?:not|never|nothing|nobody|none|neither|nor|no one|zero|
                    r"reach out|have a human|to (?:complete|finish|process|handle|resolve|approve|proceed|authori[sz]e|issue|carry out|perform))\b"
                    r"|n't\b|'ll\b|\?", re.IGNORECASE)
 # citation phrasing ("recorded under receipt X") is not an action claim; read-only statements ("the query ran") are not action claims
-_CITE_VERB = re.compile(r"\b(?:recorded|logged|filed|noted|stored|saved|documented|tracked|registered)\b(?=\W+(?:\w+\W+){0,4}?(?:receipt|ref\b|reference))", re.IGNORECASE)
+_CITE_VERB = re.compile(r"\b(?:recorded|logged|filed|noted|stored|saved|documented|tracked|registered)\b(?=\W+(?:\w+\W+){0,4}?(?:receipt|ref\b|reference|rcpt_))", re.IGNORECASE)
 _READ = re.compile(r"\b(?:quer(?:y|ies)|selects?|look(?:ed)? ?ups?|looked up|search(?:ed)?|count(?:ed)?|check(?:ed)?|retriev\w+|fetch\w*)\b", re.IGNORECASE)
 _WRITE = re.compile(r"\b(?:delet\w*|drop\w*|updat\w*|insert\w*|remov\w*|truncat\w*|cancel\w*|refund\w*|credit\w*|discount\w*|charg\w*|alter\w*|eras\w*|wip\w*|purg\w*|clear\w*)\b", re.IGNORECASE)
 _QUOTED = re.compile(r'"[^"]*"|\u201c[^\u201d]*\u201d|\b\w+(?:-\w+)+\b')
 _RESULT_STATE = re.compile(r"\bno longer (?:exists?|contains?|appears?|there|present|in the|in your|on file)\b", re.IGNORECASE)
-_SENT = re.compile(r"(?<=[.!?])\s+|\n+")
+_SENT = re.compile(r"(?<=[.!?])[\"\u201d']?\s+|\n+")
 
 
 def _families_in(clause: str):
@@ -261,13 +262,12 @@ def _families_in(clause: str):
 
 def find_assertions(reply: str) -> list[dict]:
     """Sentences that assert something happened: {i, text, families (empty = unknown), amounts}."""
-    reply = re.sub(r"\b(?:gone|went) ahead and\b", "just", reply, flags=re.IGNORECASE)
     reply = re.sub(r"\b(?:i|we) can (?:confirm|assure you)(?: that)?\b", "", reply, flags=re.IGNORECASE)
     out = []
     for i, sent in enumerate(s.strip() for s in _SENT.split(reply) if s.strip()):
         groups: list[set[str]] = []
         hit = False
-        for cl in _clauses(_CITE_VERB.sub("", CITE.sub("", sent))):
+        for cl in _clauses(CITE.sub("", _CITE_VERB.sub("", sent))):
             if _SKIP.search(_QUOTED.sub(" ", cl)) and not _RESULT_STATE.search(cl):
                 continue
             if _READ.search(cl) and not _WRITE.search(cl):

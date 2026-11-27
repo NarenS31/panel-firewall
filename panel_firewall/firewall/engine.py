@@ -183,6 +183,17 @@ class Firewall:
             cache_exempt = sql_kind is not None and sql_kind not in ("insert", "update", "delete")
         skip_cache = is_read or cache_exempt
         prior = None if skip_cache else led.prior_execution(key)   # reads, and any non-DML statement, are never replayed
+        if prior is not None and self.mode != "shadow" and conn_early is not None and led.executed_under_shadow(key):
+            # This key ran in shadow mode, when nothing was enforced. Enforcing now must not hand back that run as if it had passed the
+            # policy: re-check it. It is never run again (it really happened, and a second run would repeat the side effect).
+            try:
+                sv = conn_early.validate(action, self.policy, self._state(action.tool, now, action), now)
+                ask = sv.decision != ALLOW or (self.mode == "approval" and self._risk(action.tool, conn_early) != "read")
+            except Exception:
+                ask = True
+            if ask:
+                return self._blocked(action, key, ["this exact action already ran in shadow mode, before enforcement was on, and enforcement would not "
+                                                   "have allowed it; it is not replayed as a success and it is not run again"], trip=False)
         if prior is not None:  # a repeat of something already done: replay, never run again
             res = Result(True, prior.get("result_id"), prior.get("output"))
             return Outcome("replayed", Verdict(ALLOW, ["already executed; returning the recorded result"]), res,

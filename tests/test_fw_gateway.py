@@ -236,3 +236,45 @@ def test_serve_native_sqlite_connector_over_mcp(tmp_path):
             assert (await c.request("resources/list"))["error"]["code"] == -32601
     run(go())
     assert sqlite3.connect(db).execute("SELECT COUNT(*) FROM t").fetchone() == (4,)
+
+
+# ------------------------------------------------------------------------------------------------ bypass warning
+def _warn(tools, actions, capsys):
+    from types import SimpleNamespace
+
+    from panel_firewall.firewall.gateway import Gateway
+    from tests.fw_helpers import policy
+    gw = SimpleNamespace(_warned=set(), fw=SimpleNamespace(policy=policy(actions)))
+    Gateway._warn_bypass(gw, [{"name": t} for t in tools])
+    Gateway._warn_bypass(gw, [{"name": t} for t in tools])           # a second tools/list must not repeat the warning
+    return capsys.readouterr().err
+
+
+@pytest.mark.parametrize("name", ["exec_command", "run_shell", "bash", "open_terminal", "run_command", "run_code", "subprocess_run",
+                                  "write_file", "save_file", "create_file", "Execute_SQL"])
+def test_warns_when_an_allowed_upstream_tool_gives_shell_or_file_write(name, capsys):
+    err = _warn([name], {name: {}}, capsys)
+    assert err.strip() == f"WARNING: upstream exposes {name} which could let an agent bypass Panel. Consider blocking it in your policy."
+
+
+def test_no_warning_for_ordinary_tools_or_for_tools_the_policy_already_blocks(capsys):
+    assert _warn(["echo", "pay", "read_file"], {"echo": {"risk": "read"}, "pay": {}, "read_file": {"risk": "read"}}, capsys) == ""
+    assert _warn(["run_shell"], {"echo": {}}, capsys) == ""                                    # not listed: default deny
+    assert _warn(["run_shell"], {"run_shell": {"allowed": False}}, capsys) == ""               # listed but disallowed
+
+
+def test_proxy_prints_the_bypass_warning_once_when_the_client_lists_tools(tmp_path):
+    import json
+    import os
+    import subprocess
+    key = generate_key(tmp_path / "k.pem")
+    pol = write_policy(tmp_path, {**ACTIONS, "run_shell": {}, "blocked_exec": {"allowed": False}})
+    msgs = [{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-03-26", "capabilities": {},
+                                                                          "clientInfo": {"name": "t", "version": "1"}}},
+            {"jsonrpc": "2.0", "method": "notifications/initialized"},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/list"}, {"jsonrpc": "2.0", "id": 3, "method": "tools/list"}]
+    r = subprocess.run(panel_cmd(pol, tmp_path / "l.sqlite", key, sys.executable, FAKE), input="".join(json.dumps(m) + "\n" for m in msgs),
+                       capture_output=True, text=True, timeout=30, cwd=Path(__file__).resolve().parents[1],
+                       env={**os.environ, "FAKE_MCP_EXTRA_TOOLS": "run_shell,blocked_exec", "PANEL_UPSTREAM_TIMEOUT": "3"})
+    assert r.stderr.count("WARNING: upstream exposes run_shell which could let an agent bypass Panel. Consider blocking it in your policy.") == 1, r.stderr
+    assert "blocked_exec" not in r.stderr

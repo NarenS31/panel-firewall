@@ -147,7 +147,6 @@ def test_policy_for_another_workspace_and_rollbacks_are_refused(rig):
 def test_policy_the_engine_rejects_is_refused_even_if_signed(rig):
     cloud, state, client, pm = rig
     bad = json.dumps({"version": "9", "mode": "auto", "actions": {"x": {"max_ammount": 1}}})
-    orig = cloud.handler
     cloud.policy_doc = lambda: bad
     with pytest.raises(Exception, match="unknown keys"):
         pm.bootstrap()

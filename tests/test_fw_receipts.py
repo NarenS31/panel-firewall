@@ -93,7 +93,7 @@ def make_fw_with_ledger(path):
 
 
 def test_deleted_receipt_breaks_the_chain(tmp_path):
-    fw = _run(_file_ledger_fw(tmp_path))
+    _run(_file_ledger_fw(tmp_path))
     seqs = _receipt_seqs(tmp_path / "l.db")
     _attack(tmp_path / "l.db", "DELETE FROM events WHERE seq=?", seqs[1])
     res = verify_chain(Ledger(tmp_path / "l.db").receipts(), load_public_key(pubkey_path()))
@@ -101,7 +101,7 @@ def test_deleted_receipt_breaks_the_chain(tmp_path):
 
 
 def test_edited_receipt_breaks_the_chain(tmp_path):
-    fw = _run(_file_ledger_fw(tmp_path))
+    _run(_file_ledger_fw(tmp_path))
     seqs = _receipt_seqs(tmp_path / "l.db")
     c = sqlite3.connect(tmp_path / "l.db")
     body = c.execute("SELECT data FROM events WHERE seq=?", (seqs[1],)).fetchone()[0]
@@ -123,7 +123,7 @@ def test_deleting_the_newest_receipt_is_caught_only_with_an_external_head(tmp_pa
 
 
 def test_ledger_still_refuses_sql_edits_and_deletes(tmp_path):
-    fw = _run(_file_ledger_fw(tmp_path), 1)
+    _run(_file_ledger_fw(tmp_path), 1)
     c = sqlite3.connect(tmp_path / "l.db")
     with pytest.raises(sqlite3.DatabaseError):
         c.execute("DELETE FROM events WHERE event='receipt'")
@@ -153,7 +153,7 @@ def test_cli_verify_chain_and_tenthlook_cli_accept_panels_output(tmp_path, capsy
 
 def test_concurrent_writers_do_not_fork_the_chain(tmp_path):
     import threading
-    fw = _file_ledger_fw(tmp_path)
+    _file_ledger_fw(tmp_path)
     fws = [make_fw_with_ledger(tmp_path / "l.db") for _ in range(4)]   # four connections to one ledger file
     def go(f, i):
         for j in range(5):

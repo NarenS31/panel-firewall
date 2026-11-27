@@ -174,6 +174,10 @@ class McpUpstream:
                     pass
 
 
+# upstream tool names (substring, case-insensitive) that give an agent a shell or a file write: see Gateway._warn_bypass
+BYPASS_TOOL_WORDS = ("exec", "shell", "bash", "terminal", "command", "run_code", "subprocess", "write_file", "save_file", "create_file")
+
+
 class Gateway:
     def __init__(self, fw: Firewall, upstreams: list[McpUpstream], native: list | None = None, session: str = "default",
                  up_connectors: dict | None = None):
@@ -192,6 +196,7 @@ class Gateway:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._stop = asyncio.Event()
         self.exit_code = 0
+        self._warned: set[str] = set()
         self.on_tools = None                  # set by the cloud sync: called with every upstream tools/list result (names/schemas only leave the machine)
 
     # ------------------------------------------------------------------ output to the client
@@ -220,9 +225,26 @@ class Gateway:
         if self.passthrough:
             self._stop.set()
 
+    def _warn_bypass(self, tools) -> None:
+        """Architectural limit, so a warning and not a fix: an upstream tool that runs commands or writes files lets an agent do things that
+        never pass through Panel's other rules. Warn once per tool, and only when the policy would let it through (an unlisted tool is
+        default-deny, so there is nothing to warn about)."""
+        for t in tools:
+            name = t.get("name") if isinstance(t, dict) else None
+            if not isinstance(name, str) or name in self._warned or not any(k in name.lower() for k in BYPASS_TOOL_WORDS):
+                continue
+            rule = self.fw.policy.rule_for(name)
+            if rule is None or rule.get("allowed", True) is not True:
+                continue
+            self._warned.add(name)
+            msg = f"WARNING: upstream exposes {name} which could let an agent bypass Panel. Consider blocking it in your policy."
+            yellow = sys.stderr.isatty() and "NO_COLOR" not in os.environ
+            print(f"\033[33m{msg}\033[0m" if yellow else msg, file=sys.stderr)
+
     def _observe_tools(self, up, msg):
         tools = ((msg.get("result") or {}).get("tools")) if isinstance(msg.get("result"), dict) else None
         if isinstance(tools, list):
+            self._warn_bypass(tools)
             conn = self.up_conn.get(up.name)
             if conn is not None:
                 conn.known.update(t["name"] for t in tools if isinstance(t, dict) and isinstance(t.get("name"), str))
@@ -334,6 +356,7 @@ class Gateway:
                 cursor = res.get("nextCursor")
                 if not cursor:
                     break
+        self._warn_bypass(tools)
         if self.on_tools:
             self.on_tools(tools)
         return tools

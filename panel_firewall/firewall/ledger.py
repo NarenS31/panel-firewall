@@ -189,6 +189,13 @@ class Ledger:
         r = self._rows("SELECT data FROM events WHERE idem_key=? AND event='executed'", (idem_key,))
         return json.loads(r[0][0]) if r else None
 
+    def executed_under_shadow(self, idem_key: str) -> bool:
+        """True when the recorded execution of this key ran in shadow mode (the `requested` event just before it says mode=shadow)."""
+        r = self._rows("""SELECT json_extract(r.data,'$.mode') FROM events r WHERE r.idem_key=? AND r.event='requested'
+                          AND r.seq < (SELECT MIN(seq) FROM events WHERE idem_key=? AND event='executed')
+                          ORDER BY r.seq DESC LIMIT 1""", (idem_key, idem_key))
+        return bool(r) and r[0][0] == "shadow"
+
     def action_sha_for_key(self, idem_key: str) -> str | None:
         r = self._rows("""SELECT json_extract(data,'$.action_sha') FROM events WHERE idem_key=? AND event IN
                           ('pending','claimed','executed','requested') AND json_extract(data,'$.action_sha') IS NOT NULL

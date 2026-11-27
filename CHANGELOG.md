@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+- Claim blocker (receipts mode): detects "dealt with", "pushed it through", "went ahead and", "wrapped up"; "ran into/across/out" is no longer read as an action; "recorded as/under <id>" counts as citation wording; a closing quote ends the sentence.
+- Shadow to enforce: a call that ran in shadow mode is re-checked against the policy when sent again after enforcement is on (blocked if enforcement would not allow it; never run twice).
+- `usepanel proxy` warns when an allowed upstream tool looks like shell or file-write access (it can bypass Panel).
+- Ctrl+C stops `usepanel proxy` / `serve` with "Panel stopped." and exit code 0, no traceback.
+- Lint: F841 and B023 are enforced again.
+
 ## 0.3.1
 - `usepanel demo`: zero-setup interactive demo (no config, no API keys, 5 scenarios)
 - README: "Try it in 10 seconds" section, copy-paste configs for Claude Desktop and Cursor

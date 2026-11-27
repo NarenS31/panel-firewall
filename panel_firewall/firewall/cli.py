@@ -223,6 +223,11 @@ def cmd_proxy(a):
     return run_proxy(a)
 
 
+def cmd_audit(a):
+    from panel_firewall.firewall.audit import run_audit
+    return run_audit(a)
+
+
 def cmd_doctor(a):
     from panel_firewall.firewall.doctor import cmd_doctor as run
     return run(a)
@@ -294,6 +299,11 @@ def main(argv=None) -> int:
     p.add_argument("--shadow", action="store_true", help="evaluate everything and log what WOULD be blocked/held, but let actions run")
     cloud_flags(p)
     p.add_argument("upstream", nargs=argparse.REMAINDER); p.set_defaults(fn=cmd_proxy)
+    p = sub.add_parser("audit", help="inspect MCP tool definitions and draft a policy (no keys, PIN or config needed)")
+    p.add_argument("--policy", help="optional policy to check for missing controls")
+    p.add_argument("--out", help="write starter YAML instead of printing it (must not exist)")
+    p.add_argument("--no-color", action="store_true")
+    p.add_argument("upstream", nargs=argparse.REMAINDER, help="-- <upstream command>"); p.set_defaults(fn=cmd_audit)
     p = sub.add_parser("doctor", help="check your setup (signing key, PIN, API key, cloud reachability) and print the fix for each problem")
     p.add_argument("--policy"); p.add_argument("--key"); p.add_argument("--pin-file"); cloud_flags(p)
     p.add_argument("upstream", nargs=argparse.REMAINDER, help="-- <upstream command> (optional: checks it is installed)"); p.set_defaults(fn=cmd_doctor)
@@ -309,3 +319,6 @@ def main(argv=None) -> int:
     except FirewallError as e:
         print(f"panel: {e}", file=sys.stderr)
         return 2
+    except KeyboardInterrupt:        # Ctrl+C is how a person stops `usepanel proxy` / `serve`: not an error. stderr, because stdout is the MCP stream
+        print("Panel stopped.", file=sys.stderr)
+        return 0

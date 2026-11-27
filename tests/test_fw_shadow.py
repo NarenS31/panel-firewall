@@ -56,7 +56,7 @@ def test_shadow_would_ask_runs_without_creating_a_pending_approval():
 
 
 def test_shadow_clean_call_logs_no_would_event_under_auto_enforce():
-    fw, conn = make_fw(ACTIONS, mode="shadow", connectors=[FakeConnector()]), None
+    fw = make_fw(ACTIONS, mode="shadow", connectors=[FakeConnector()])
     fw.policy.raw["enforce_mode"] = "auto"
     o = fw.handle(act(amount=10))
     assert o.status == "executed" and o.shadow is None
@@ -127,7 +127,6 @@ def test_shadow_policy_mode_and_enforce_mode_validation():
 
 # ------------------------------------------------------------------------------------------------ gateway: `proxy --shadow`
 def test_proxy_shadow_flag_end_to_end_and_report(rig):  # noqa: F811
-    cmd = rig["cmd"][:-2] if False else None
     base = panel_cmd(rig["pol"], rig["ledger"], rig["key"], sys.executable, FAKE, extra=("--shadow",))
 
     async def go():
@@ -267,3 +266,31 @@ def test_cli_export_log_and_export_receipts_scrub(tmp_path, capsys):
     rc = tmp_path / "r.json"
     assert main(["export-receipts", "--ledger", str(led), "--out", str(rc), "--scrub"]) == 0
     assert json.loads(rc.read_text())[0]["scrubbed"] is True
+
+
+# ------------------------------------------------------------------------------------------------ shadow -> enforce
+def test_shadow_execution_is_not_replayed_as_a_success_once_enforcement_is_on():
+    fw, conn = shadow_fw()
+    a = fw.handle(act(amount=500, key="k-sh"))           # over max_amount: enforcement would block; shadow lets it run
+    assert a.status == "executed" and len(conn.calls) == 1
+    fw.mode = "auto"                                      # a human drops --shadow
+    b = fw.handle(act(amount=500, key="k-sh"))
+    assert b.status == "blocked" and "ran in shadow mode" in b.verdict.reasons[0]
+    assert len(conn.calls) == 1                           # and it is not run a second time
+    assert [e for e in fw.ledger.events(idem_key=b.idempotency_key) if e["event"] == "blocked"]
+
+
+def test_shadow_execution_that_enforcement_would_allow_is_still_replayed_not_rerun():
+    fw, conn = shadow_fw()
+    a = fw.handle(act(amount=10, key="k-ok"))
+    fw.mode = "auto"
+    b = fw.handle(act(amount=10, key="k-ok"))
+    assert a.status == "executed" and b.status == "replayed" and len(conn.calls) == 1
+
+
+def test_enforced_execution_is_still_replayed_after_a_mode_change():
+    fw, conn = shadow_fw()
+    fw.mode = "auto"
+    a = fw.handle(act(amount=10, key="k-enf"))
+    fw.mode = "shadow"; fw.mode = "auto"
+    assert a.status == "executed" and fw.handle(act(amount=10, key="k-enf")).status == "replayed" and len(conn.calls) == 1

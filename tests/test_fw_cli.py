@@ -69,3 +69,37 @@ def test_cli_deny_and_pending(env, capsys):
 def test_keygen_refuses_inside_repo(capsys):
     assert main(["keygen", "--path", str(ROOT / "oops.pem")]) == 2
     assert not (ROOT / "oops.pem").exists()
+
+
+# ------------------------------------------------------------------------------------------------ Ctrl+C
+def test_keyboard_interrupt_exits_cleanly_with_one_line(capsys, monkeypatch):
+    from panel_firewall.firewall import cli
+    monkeypatch.setattr(cli, "cmd_demo", lambda a: (_ for _ in ()).throw(KeyboardInterrupt()))
+    assert cli.main(["demo"]) == 0
+    err = capsys.readouterr().err
+    assert err.strip() == "Panel stopped." and "Traceback" not in err
+
+
+def test_ctrl_c_on_a_running_proxy_exits_zero_without_a_traceback(tmp_path):
+    import signal
+    import subprocess
+    import sys
+    import time
+    from pathlib import Path
+
+    from panel_firewall.firewall.receipts import generate_key
+    from tests.fw_helpers import panel_cmd, write_policy
+    key = generate_key(tmp_path / "k.pem")
+    pol = write_policy(tmp_path, {"echo": {"risk": "read"}})
+    fake = str(Path(__file__).parent / "support" / "fake_mcp_server.py")
+    p = subprocess.Popen(panel_cmd(pol, tmp_path / "l.sqlite", key, sys.executable, fake), stdin=subprocess.PIPE,
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=Path(__file__).resolve().parents[1])
+    time.sleep(2.5)
+    p.send_signal(signal.SIGINT)
+    try:
+        out, err = p.communicate(timeout=15)
+    except subprocess.TimeoutExpired:
+        p.kill()
+        raise
+    assert p.returncode == 0, err.decode()
+    assert b"Traceback" not in err and err.decode().strip().splitlines()[-1] == "Panel stopped."

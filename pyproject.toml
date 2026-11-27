@@ -49,9 +49,9 @@ include = ["panel_firewall*"]
 panel_firewall = ["guard/static/*", "guard/data/*"]
 
 [tool.ruff.lint]
-# Style/strictness rules suppressed on purpose: the code fails closed with broad excepts (BLE001, S110), tests and
-# scripts bind throwaway variables, and subprocess calls check results themselves. Real bugs (F, E9) stay enforced.
-ignore = ["BLE001", "S110", "RUF059", "F841", "ISC004", "PLW1510", "PLW1509", "SIM115", "SIM102", "C408", "B023",
+# Style/strictness rules suppressed on purpose: the code fails closed with broad excepts (BLE001, S110), subprocess calls check results themselves. Real bugs (F, E9) stay enforced.
+extend-select = ["B023"]      # B023 is not on by default; keep it on so a closure can never capture a loop variable by accident
+ignore = ["BLE001", "S110", "RUF059", "ISC004", "PLW1510", "PLW1509", "SIM115", "SIM102", "C408",
           "B018", "RUF015", "RUF012", "RUF034", "RUF046", "TRY004", "PERF102", "FURB192"]
 
 [tool.ruff]

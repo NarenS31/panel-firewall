@@ -30,7 +30,7 @@ def check_claim(claim: dict, policy: Policy, order: dict | None, today: date, as
     for r in policy.rules_for(t):
         kind, rid = r["kind"], r["id"]
 
-        def need_order():
+        def need_order(r=r, rid=rid):   # bound per iteration (B023)
             if order is None:
                 unknown.append(f"{rid}: no order identified, so this can't be checked yet.")
                 return False
