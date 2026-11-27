@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **Learning loop (observe -> suggest -> human approves -> enforce; no model in any verdict):**
+  - `anomaly:` policy block + `anomaly.py`: per-tool baselines (amount percentiles, argument shapes, call rate, tool sequence, timing) in a `baselines` table, updated on every executed action; actions outside the baseline are logged as `anomaly` ledger events with a 0..1 severity (z-scores and percentiles). In enforce mode `hold_severity` turns a flag into a HOLD (needs consent), never a block; shadow mode only logs. `usepanel baseline [--rebuild]`.
+  - `usepanel suggest --from-shadow --since 7d`: templated rule suggestions (max_amount, rate_limit, entity_velocity, consent_sql_kinds) from observed traffic. Accepted rules go to `<policy>.suggested.yaml`; the live policy is never edited.
+  - `learned_patterns` table + `usepanel learn`: mark patterns real threat / false positive. Threats become suggestions; false positives raise that tool's anomaly threshold. Policy rules are never loosened automatically.
+  - Cloud threat feed: `GET /v1/telemetry/threat-feed` pulled on the sync tick (telemetry on), merged as `source=cloud`, suggestions only.
+  - `usepanel tighten --policy p.yaml --ledger l.db --max-rounds 10`: loops suggest -> counterfactual replay of the last 500 actions -> accept only rules that catch >= 1 anomaly with 0 false positives and 0 previously approved actions held, until a round adds nothing. Stages to `<policy>.suggested.yaml`, never loosens a rule, logs `tighten_round` events.
+  - `usepanel report` prints "Baseline drift detected" when this week differs from last week.
+
 ## 0.4.0
 - **Cross-session tracking:** `rate_limit` and `max_total_amount` count across every session by default; `cross_session: false` scopes a rule to one conversation.
 - **`entity_velocity`:** block when the same value of a field (e.g. `customer_id`) is in too many executed calls to a tool within a window, in any session.

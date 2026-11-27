@@ -149,6 +149,106 @@ def cmd_report(a):
     return 0
 
 
+def cmd_suggest(a):
+    """Rule suggestions from observed traffic. Prints templated YAML; a human accepts; accepted rules go to a PROPOSAL file, never the live policy."""
+    from panel_firewall.firewall import suggest
+    from panel_firewall.firewall.policy import load_policy
+    pol = load_policy(a.policy) if a.policy else None
+    if a.accept in ("all", "review") and pol is None:
+        raise FirewallError("--policy is required to write a proposal")
+    res = suggest.analyze(_ledger(a), pol, _since(a), a.min_calls, from_shadow=a.from_shadow)
+    if a.json:
+        print(json.dumps(res, indent=2, default=list))
+        return 0
+    print(suggest.format_suggestions(res, a.since or "7d", a.from_shadow))
+    if not res["tools"]:
+        return 0
+    if a.accept == "skip" or (a.accept is None and not sys.stdin.isatty()):
+        print("\nNothing was changed. Re-run in a terminal to review, or pass --accept all|review.")
+        return 0
+    first = [True]
+
+    def ask(q):
+        if a.accept == "all":
+            return "all"
+        if a.accept == "review" and first[0]:
+            first[0] = False
+            return "review"
+        first[0] = False
+        return input(q)
+    accepted = suggest.review(res, ask)
+    if not accepted:
+        print("Skipped. Nothing was changed.")
+        return 0
+    out = suggest.write_proposal(a.policy, pol.raw, accepted, a.out)
+    print(f"\nWrote {sum(len(r) for r in accepted.values())} accepted rule(s) to {out}.\n"
+          f"Panel does NOT use it yet. Diff it against {a.policy}, review it, and deploy it yourself.")
+    return 0
+
+
+def cmd_learn(a):
+    """Review learned patterns: mark each a real threat or a false positive. Threats become rule suggestions; false positives loosen anomaly thresholds."""
+    from panel_firewall.firewall import learn
+    led = _ledger(a)
+    who = a.who or getpass.getuser()
+    if a.mark is not None:
+        print(learn.mark(led, a.mark, a.as_, who))
+        return 0
+    todo = learn.patterns(led, status="unconfirmed")
+    if a.list or not todo or not sys.stdin.isatty():
+        if not todo:
+            print("No unconfirmed patterns.")
+        for p in todo:
+            h = learn.hints(led, p["tool"])
+            print(learn.describe(p) + (f"   (earlier holds of this tool: {h['approved']} approved, {h['denied']} denied)" if h["approved"] or h["denied"] else ""))
+        if todo and not a.list:
+            print("\nRun in a terminal to review them, or: usepanel learn --mark ID --as threat|false_positive")
+        return 0
+    for p in todo:
+        h = learn.hints(led, p["tool"])
+        print(learn.describe(p) + (f"\n    hint: earlier holds of this tool: {h['approved']} approved, {h['denied']} denied" if h["approved"] or h["denied"] else ""))
+        while True:
+            c = input("  mark as [t]hreat / [f]alse positive / [s]kip: ").strip().lower()
+            if c[:1] in ("t", "f", "s"):
+                break
+        if c[0] != "s":
+            print("  " + learn.mark(led, p["id"], "threat" if c[0] == "t" else "false_positive", who))
+    return 0
+
+
+def cmd_baseline(a):
+    from panel_firewall.firewall import anomaly
+    from panel_firewall.firewall.policy import load_policy
+    led = _ledger(a)
+    if a.rebuild:
+        counts = anomaly.rebuild(load_policy(a.policy) if a.policy else None, led, time.time())
+        print("rebuilt baselines from the ledger: " + (", ".join(f"{t} ({n} calls)" for t, n in sorted(counts.items())) or "no executed calls found"))
+    print(anomaly.format_baselines(led))
+    return 0
+
+
+def cmd_tighten(a):
+    """Repeat observe -> suggest -> test until nothing more can be caught without a false positive. Writes <policy>.suggested.yaml only."""
+    from panel_firewall.firewall import tighten
+    from panel_firewall.firewall.policy import load_policy
+    pol = load_policy(a.policy)
+    res = tighten.run(_ledger(a), pol.raw, max_rounds=a.max_rounds, n_history=a.history, min_calls=a.min_calls, min_severity=a.min_severity,
+                      min_headroom=a.min_headroom)
+    if res["stop"] in ("no history", "nothing to tighten"):
+        print("No requested actions in the ledger." if res["stop"] == "no history" else
+              f"Nothing to tighten: {res['anomalies']} anomalies among the last {res['history']} actions, none uncaught.")
+        return 0
+    n = len(res["accepted"])
+    if res["stop"] == "max_rounds":
+        print(f"Stopped at --max-rounds {a.max_rounds}; rules were still being added (run again to continue).")
+    if n:
+        out = tighten.write_staging(a.policy, res["staged"], res["accepted"], a.out)
+        print(f"Tightening complete. {n} new rule{'s' if n != 1 else ''} staged in {out}\nThe live policy was not changed. Diff, review, then merge it yourself.")
+    else:
+        print("Tightening complete. 0 new rules staged.")
+    return 0
+
+
 def cmd_exploits(a):
     """What exploit patterns this machine has seen (anonymized signatures stored by `telemetry: true`)."""
     from panel_firewall.firewall import telemetry
@@ -299,6 +399,21 @@ def main(argv=None) -> int:
     p.set_defaults(fn=cmd_export)
     p = sub.add_parser("report", help="shadow mode: what would have been blocked or held, by rule")
     common(p); p.add_argument("--since", default="48h"); p.add_argument("--json", action="store_true"); p.set_defaults(fn=cmd_report)
+    p = sub.add_parser("suggest", help="suggest policy rules from observed (shadow-mode) traffic; accepted rules go to a proposal file, never the live policy")
+    common(p); p.add_argument("--since", default="7d"); p.add_argument("--from-shadow", action="store_true", help="only calls that ran while in shadow mode")
+    p.add_argument("--min-calls", type=int, default=100, help="a tool needs this many executed calls before anything is suggested (default 100)")
+    p.add_argument("--accept", choices=("all", "review", "skip"), help="answer the prompt without a terminal; `all` writes every suggestion to the proposal file")
+    p.add_argument("--out", help="proposal file (default <policy>.suggested.yaml)"); p.add_argument("--json", action="store_true"); p.set_defaults(fn=cmd_suggest)
+    p = sub.add_parser("learn", help="mark learned patterns as real threats or false positives (threats become rule suggestions)")
+    common(p); p.add_argument("--list", action="store_true"); p.add_argument("--mark", type=int, metavar="ID")
+    p.add_argument("--as", dest="as_", choices=("threat", "false_positive")); p.add_argument("--who"); p.set_defaults(fn=cmd_learn)
+    p = sub.add_parser("baseline", help="show the learned per-tool baselines (amount percentiles, call rate); --rebuild recomputes them from the ledger")
+    common(p); p.add_argument("--rebuild", action="store_true"); p.set_defaults(fn=cmd_baseline)
+    p = sub.add_parser("tighten", help="loop observe -> suggest -> test: stage rules that catch anomalies with zero false positives (never edits the live policy)")
+    common(p); p.add_argument("--max-rounds", type=int, default=10); p.add_argument("--history", type=int, default=500, help="how many recent actions to replay (default 500)")
+    p.add_argument("--min-calls", type=int, default=100); p.add_argument("--min-severity", type=float, default=0.4)
+    p.add_argument("--min-headroom", type=float, default=1.02, help="never tighten a threshold below this multiple of the largest legitimate value (default 1.02)")
+    p.add_argument("--out", help="staging file (default <policy>.suggested.yaml)"); p.set_defaults(fn=cmd_tighten)
     p = sub.add_parser("exploits", help="anonymized exploit patterns seen on this machine (needs `telemetry: true` in the policy to record them)")
     common(p); p.add_argument("--since", default="24h"); p.add_argument("--json", action="store_true"); p.set_defaults(fn=cmd_exploits)
     p = sub.add_parser("threats", help="the aggregated threat feed from Panel Cloud (placeholder)")

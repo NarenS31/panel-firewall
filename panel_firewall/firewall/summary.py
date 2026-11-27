@@ -12,6 +12,7 @@ from panel_firewall.firewall.scrub import scrub_text
 
 # reason text (as produced by policy.evaluate, sqlguard and the connectors) -> the rule that produced it
 _RULES = [
+    (r"^anomaly: ", "anomaly"),
     (r"already had a .* ago|which the duplicate guard needs", "duplicate_guard"),
     (r"^circuit breaker", "circuit_breaker"),
     (r"is not allowed by policy", "allowed"),
@@ -116,10 +117,27 @@ def build_report(ledger, since_ts: float, policy=None) -> dict:
     last = max((e["ts"] for e in evs), default=None)
     return {"since": since_ts, "first_event": first, "last_event": last, "actions_seen": len(req), "actions_ran": len(ran),
             "would_have_blocked": blocked, "would_have_asked": asked, "unaffected": max(0, len(req) - len(would_keys)),
-            "by_rule": rows, "shadow_mode_seen": bool(req) and any(r["data"].get("mode") == "shadow" for r in req.values())}
+            "drift": _drift(ledger), "by_rule": rows, "shadow_mode_seen": bool(req) and any(r["data"].get("mode") == "shadow" for r in req.values())}
+
+
+def _drift(ledger) -> list:
+    """This week vs last week (see drift.py). Never lets a problem here break the report."""
+    try:
+        from panel_firewall.firewall import drift
+        return drift.detect(ledger, time.time())
+    except Exception:
+        return []
 
 
 def format_report(rep: dict, hours_label: str = "") -> str:
+    text = _format_report(rep, hours_label)
+    if rep.get("drift"):
+        from panel_firewall.firewall import drift
+        text += "\n\n" + drift.format_drift(rep["drift"])
+    return text
+
+
+def _format_report(rep: dict, hours_label: str = "") -> str:
     out = [f"Panel shadow-mode report{(' (last ' + hours_label + ')') if hours_label else ''}",
            "Shadow mode let every action run. Nothing below was actually stopped.", ""]
     if not rep["actions_seen"]:

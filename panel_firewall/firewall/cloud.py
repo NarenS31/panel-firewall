@@ -39,6 +39,9 @@ STATE_ROOT = "~/.config/panel/cloud"
 _VERDICT = {"ALLOWED": "allow", "NEEDS_CONSENT": "needs_consent", "BLOCKED": "block"}
 
 
+THREAT_FEED_EVERY = 600.0      # seconds between threat-feed pulls
+
+
 class CloudError(FirewallError):
     pass
 
@@ -134,6 +137,7 @@ class CloudClient:
     def ping(self) -> dict: return self._req("GET", "/v1/ping")
     def events(self, events: list[dict]) -> dict: return self._req("POST", "/v1/events", json={"events": events})
     def telemetry_exploits(self, signatures: list[dict]) -> dict: return self._req("POST", "/v1/telemetry/exploits", json={"signatures": signatures})
+    def threat_feed(self) -> dict: return self._req("GET", "/v1/telemetry/threat-feed")
     def freeze(self) -> dict: return self._req("GET", "/v1/proxy/freeze")
     def tools(self, tools: list[dict]) -> dict: return self._req("POST", "/v1/proxy/tools", json={"tools": tools})
     def request_approval(self, body: dict) -> dict: return self._req("POST", "/v1/approvals", json=body)
@@ -311,6 +315,7 @@ class CloudSync:
         self.policy_every, self.tick_every, self.clock, self.on_change = policy_every, tick_every, clock, on_change
         self._last_policy = 0.0
         self._last_telemetry = 0.0
+        self._last_feed = -1e18
         self._registered: dict[str, float] = {}
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -406,6 +411,26 @@ class CloudSync:
                 return sent
             log_.mark_uploaded([i for i, _s in rows], self.clock())
             sent += len(rows)
+
+    # -- threat feed (opt-in with the same `telemetry: true`): patterns other deployments saw, merged as suggestions only
+    def pull_threat_feed(self) -> int:
+        """GET /v1/telemetry/threat-feed at most every THREAT_FEED_EVERY seconds and merge the patterns into `learned_patterns` with
+        source='cloud'. They are never enforced: they only feed `usepanel suggest` and `usepanel learn`. A cloud without the endpoint (404),
+        or any network trouble, just means nothing is merged this time. Returns how many patterns were accepted."""
+        from panel_firewall.firewall import learn, telemetry as tm
+        if not tm.enabled(self.fw.policy) or self.clock() - self._last_feed < THREAT_FEED_EVERY:
+            return 0
+        self._last_feed = self.clock()
+        try:
+            payload = self.client.threat_feed()
+        except CloudError as e:
+            log.info("threat feed unavailable (%s)", e)
+            return 0
+        try:
+            return learn.merge_feed(self.fw.ledger, payload, self.clock())
+        except Exception:
+            log.exception("could not merge the threat feed")
+            return 0
 
     # -- approvals
     def register_pending(self) -> int:
@@ -523,6 +548,7 @@ class CloudSync:
             self.refresh_policy()
         self.upload_events()
         self.upload_telemetry()
+        self.pull_threat_feed()
         self.register_pending()
         self.check_decisions(wait=0)
         self.check_unfreeze()

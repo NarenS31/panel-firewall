@@ -10,7 +10,7 @@ import logging
 import time
 from dataclasses import dataclass
 
-from panel_firewall.firewall import telemetry
+from panel_firewall.firewall import anomaly, telemetry
 from panel_firewall.firewall.connector import Connector
 from panel_firewall.firewall.ledger import Ledger, approval_id
 from panel_firewall.firewall.policy import LedgerState, Policy, window_needed
@@ -238,6 +238,11 @@ class Firewall:
                 v = Verdict(BLOCK, out_reasons + (v.reasons if v.decision == BLOCK else []))
         except Exception as e:
             return self._blocked(action, key, [f"validation failed ({type(e).__name__}: {e}); blocked for safety"])
+        anoms, asev = anomaly.check(self.policy, led, action, key, now)
+        hold_at = (anomaly.settings(self.policy) or {}).get("hold_severity")
+        if anoms and hold_at is not None and asev >= hold_at and self.mode != "shadow" and self._risk(action.tool, conn) != "read" and v.decision != BLOCK:
+            # a statistical flag can only HOLD (needs a human), never block, and only when the human set hold_severity
+            v = Verdict(NEEDS_CONSENT, (v.reasons if v.decision == NEEDS_CONSENT else []) + [anomaly.hold_reason(anoms, asev, hold_at)])
         led.append(key, action.conversation_id, action.tool, "requested",
                    {"action_sha": sha, "args": action.args, "verdict": v.to_dict(), "mode": self.mode})
         if self.mode == "shadow":
@@ -315,6 +320,7 @@ class Firewall:
             return Outcome("failed", v, res, idempotency_key=key)
         self.ledger.append(key, action.conversation_id, action.tool, "read",
                            {"action_sha": sha, "result_id": res.result_id, "amount": None})
+        anomaly.observe(self.policy, self.ledger, action, key, self.clock())
         return Outcome("executed", v, res, receipt=self._receipt(action, key, rv or v, "executed", res.result_id, extra=extra), idempotency_key=key)
 
     def _wait_for_approval(self, key: str, sha: str):
@@ -348,6 +354,7 @@ class Firewall:
         led.append(key, action.conversation_id, action.tool, "executed",
                    {"action_sha": sha, "result_id": res.result_id, "output": res.output, "amount": self._amount(action),
                     "approved_by": approver})
+        anomaly.observe(self.policy, led, action, key, self.clock())
         rec = self._receipt(action, key, rv or v, "executed", res.result_id, approver, extra)
         return Outcome("executed", v, res, receipt=rec, idempotency_key=key)
 

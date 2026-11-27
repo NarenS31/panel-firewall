@@ -24,6 +24,7 @@ Rule keys (all optional except where noted), per action name under `actions:`:
 Top-level:
   max_total_outflow: {amount: n, per_seconds: s, tools: [..]}   money out summed across the listed tools (each tool's own amount_field)
                            in the window, any session; executed total + this amount > n -> block (catches refund+credit+withdraw splits)
+  anomaly: {min_calls, hold_severity, enabled}   learned baselines + anomaly flags (see anomaly.py); a hold only when hold_severity is set
   telemetry: bool          opt in (default false) to anonymized exploit signatures (see telemetry.py)
   duplicate_guard: {field: str, within_seconds: s}   a second EXECUTED action of this tool with the same value in `field`
                            (for example order_id) inside the window -> needs_consent (a human may approve it). A missing field blocks.
@@ -62,7 +63,7 @@ RULE_KEYS = {"allowed", "risk", "required_fields", "amount_field", "max_amount",
              "consent_over_rows", "protected", "consent_if", "block_if", "rate_limit", "max_total_amount", "sql",
              "path_args", "allowed_roots", "sql_arg", "note", "duplicate_guard", "consent_sql_kinds", "entity_velocity"}
 TOP_KEYS = {"version", "name", "mode", "reviewed", "receipts", "actions", "sql", "consent_wait_seconds", "database",
-            "session", "ledger", "connectors", "enforce_mode", "circuit_breaker", "max_total_outflow", "telemetry"}
+            "session", "ledger", "connectors", "enforce_mode", "circuit_breaker", "max_total_outflow", "telemetry", "anomaly"}
 
 
 @dataclass
@@ -146,6 +147,9 @@ def parse_policy(raw: dict, sha: str = "") -> Policy:
                 and all(isinstance(mo.get(x), (int, float)) and not isinstance(mo.get(x), bool) and math.isfinite(mo[x]) and mo[x] > 0 for x in ("amount", "per_seconds"))
                 and isinstance(mo.get("tools"), list) and mo["tools"] and all(isinstance(t, str) and t for t in mo["tools"])):
             raise FirewallError("policy: max_total_outflow needs a positive amount, a positive per_seconds and a non-empty list of tools")
+    if "anomaly" in raw:
+        from panel_firewall.firewall.anomaly import validate_config
+        validate_config(raw["anomaly"])
     if "telemetry" in raw and not isinstance(raw["telemetry"], bool):
         raise FirewallError("policy: telemetry must be true or false")
     cb = raw.get("circuit_breaker")

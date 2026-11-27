@@ -208,6 +208,11 @@ def record_verdict(policy, ledger, action, reasons: list[str], verdict: str, now
         spread, pos = _spread_and_position(ledger, policy, action.tool, tool_rule, args, action.conversation_id, now, rule)
         sig = build_signature(rule=rule, tool=action.tool, verdict=verdict, ts=now, ratio=ratio, position=pos, spread=spread)
         ExploitLog(ledger).add(sig)
+        try:
+            from panel_firewall.firewall import learn
+            learn.record_exploit(ledger, policy, action, rule, sig, now)
+        except Exception:
+            log.debug("telemetry: could not record a learned pattern", exc_info=True)
         return sig
     except Exception:
         log.debug("telemetry: could not record a signature", exc_info=True)
