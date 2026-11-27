@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "panel-firewall"
-version = "0.3.0"
+version = "0.3.1"
 description = "Panel checks what an AI agent says and what it does: an action firewall (MCP proxy, deterministic policy, consent, idempotency, signed receipts) and a support-bot guard."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"          # SPDX; matches LICENSE
 license-files = ["LICENSE"]
-keywords = ["ai-agents", "mcp", "guardrails", "policy", "receipts", "llm-safety"]
+keywords = ["ai-agents", "mcp", "mcp-server", "guardrails", "firewall", "policy", "receipts", "llm-safety", "claude-desktop", "ai-safety", "tool-use"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
@@ -30,9 +30,9 @@ dependencies = [
 [project.urls]
 Homepage = "https://usepanel.dev"
 Documentation = "https://usepanel.dev/how-it-works"
-Repository = "https://github.com/NarenS31/panel-firewall"
-Issues = "https://github.com/NarenS31/panel-firewall/issues"
-Changelog = "https://github.com/NarenS31/panel-firewall/blob/main/CHANGELOG.md"
+Repository = "https://github.com/tenthlook/panel-firewall"
+Issues = "https://github.com/tenthlook/panel-firewall/issues"
+Changelog = "https://github.com/tenthlook/panel-firewall/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-asyncio"]
@@ -40,6 +40,7 @@ llm = ["openai>=1"]          # only for eval/run_llm_eval.py
 
 [project.scripts]
 usepanel = "panel_firewall.firewall.cli:main"
+panel-firewall = "panel_firewall.firewall.cli:main"   # so `pipx run panel-firewall demo` works
 
 [tool.setuptools.packages.find]
 include = ["panel_firewall*"]

@@ -24,6 +24,13 @@ Fail closed (unknown tool, bad argument, engine error: block). Consent never com
 The support guard parses the bot's reply into promises and actions, checks them against a written store policy (refund window, amount limits, escalation threshold, discount cap) and the real order record, and lets a reply through only if every promise is backed.
 **v7 (new) consent:** before any action runs, Panel sends a confirmation question it generates from the action ("To confirm: refund $24.00 on order #1042? Reply yes to proceed."), and only a short plain yes to *that* message counts; anything else is re-asked once, then handed to a person (`panel_firewall/guard/v7.py`, [results/v7_report.md](results/v7_report.md)). Earlier versions (v6.x) read the customer's words with phrase rules and are kept frozen.
 
+## Try it in 10 seconds
+No config, no API keys, nothing to set up:
+```bash
+pipx run panel-firewall demo
+```
+Runs a simulated support agent that tries five actions — a lookup, a small refund, an over-limit refund, one that needs human approval, and a destructive delete — and shows Panel blocking, holding, and approving each one live in your terminal.
+
 ## Install and quickstart
 Requires Python 3.11+. `tenthlook-core` (the receipt format) is installed automatically.
 **With Panel Cloud (one command, no key to copy).** The dashboard shows a setup command with a one-time token (it works once, for 10 minutes). Paste it:
@@ -58,6 +65,40 @@ python -m panel_firewall.guard.proxy --upstream https://api.openai.com/v1 --poli
 **Shadow mode** evaluates every call against your policy, lets it run, and records "would have blocked" / "would have asked" in the ledger (receipts carry `mode=shadow`). It never switches itself to enforcing; you do that by dropping `--shadow` (or `mode: shadow` in the policy). Until then Panel protects nothing, and the proxy says so on start-up. `usepanel report --since 48h` groups the would-be decisions by tool and rule; `usepanel export-log` writes PII-scrubbed summaries (no raw arguments unless you pass `--include-raw-args`).
 
 Example policies and MCP client config: [examples/](examples/). Tests: `pip install -e ".[dev]" && pytest` (the real-MCP-server tests skip if the servers are not installed).
+
+## Copy-paste configs for popular tools
+
+**Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS, `%APPDATA%\Claude\claude_desktop_config.json` on Windows):
+```json
+{
+  "mcpServers": {
+    "sqlite-via-panel": {
+      "command": "usepanel",
+      "args": ["proxy", "--policy", "panel-policy.yaml", "--shadow", "--",
+               "npx", "-y", "@modelcontextprotocol/server-sqlite", "mydb.sqlite"]
+    }
+  }
+}
+```
+
+**Cursor** (`.cursor/mcp.json` in your project):
+```json
+{
+  "mcpServers": {
+    "filesystem-via-panel": {
+      "command": "usepanel",
+      "args": ["proxy", "--policy", "panel-policy.yaml", "--shadow", "--",
+               "npx", "-y", "@modelcontextprotocol/server-filesystem", "."]
+    }
+  }
+}
+```
+
+**Any stdio MCP client** — Panel wraps any MCP server command:
+```bash
+usepanel proxy --policy panel-policy.yaml --shadow -- <your-mcp-server-command>
+```
+Start with `--shadow` to log what Panel would do without blocking anything. Review with `usepanel report`, then drop `--shadow` to enforce.
 
 ## Real results
 Every number below is from a file in this repo. Each evaluation was written down and hashed **before** it was run (`*prereg*` files and `FROZEN_*.sha256`). I wrote the policies, tasks, labels and code, so read these as engineering evidence, not independent validation.
@@ -108,5 +149,8 @@ Latency (Apple M4, loaded machine): policy `validate` median 0.01 ms (Shopify/St
 
 ## Repository layout
 `panel_firewall/firewall/` firewall engine, connectors, gateway, receipts, claim blocker · `panel_firewall/guard/` support guard (v6.x frozen; v7) · `panel_firewall/execute/` executor and approval page · `eval/` and `results/` firewall evaluations (pre-registrations, hashes, raw rows) · `guard_data/`, `guard_results/` guard sets and runs (fictional store and orders) · `tests/`.
+
+## Get help
+Need help setting up Panel on your MCP server? Email narensara@usepanel.dev or open an issue.
 
 License: MIT (see LICENSE).

@@ -25,6 +25,12 @@ def cmd_keygen(a):
     return 0
 
 
+def cmd_demo(a):
+    """Zero-config walkthrough of the firewall in a temp dir (no key, policy, PIN or network needed)."""
+    from panel_firewall.firewall.demo import run_demo
+    return run_demo(color=False if a.no_color else None)
+
+
 def cmd_fingerprint(a):
     """Print the fingerprint of this machine's receipt-signing key, to compare with the one Panel Cloud shows before an owner confirms it."""
     from panel_firewall.firewall.receipts import Signer, fingerprint
@@ -244,6 +250,8 @@ def main(argv=None) -> int:
         p.add_argument("--cloud-pubkey", help="pin the cloud's Ed25519 policy-signing key (base64) instead of trusting the first one seen")
         p.add_argument("--cloud-state-dir", help="where the cached signed policy, pinned key and upload cursor live (default ~/.config/panel/cloud/<id>)")
 
+    p = sub.add_parser("demo", help="zero-setup demo: a simulated agent tries five actions and Panel blocks, holds and approves them (no config, no API keys)")
+    p.add_argument("--no-color", action="store_true"); p.set_defaults(fn=cmd_demo)
     p = sub.add_parser("keygen", help="create the Ed25519 receipt-signing key (outside the repo)")
     p.add_argument("--path"); p.add_argument("--force", action="store_true"); p.set_defaults(fn=cmd_keygen)
     p = sub.add_parser("fingerprint", help="show the fingerprint of the receipt-signing key, to compare with Panel Cloud before confirming it")

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1
+- `usepanel demo`: zero-setup interactive demo (no config, no API keys, 5 scenarios)
+- README: "Try it in 10 seconds" section, copy-paste configs for Claude Desktop and Cursor
+- PyPI keywords expanded for discoverability
+- Repo URLs updated to tenthlook org
+
 ## 0.3.0
 - **Browser sign-in**: `usepanel init --cloud` opens Panel Cloud in your browser, you press Authorize, and the workspace API key is saved for you. No more copying keys.
 - **Policy templates** in Panel Cloud: start from E-commerce agent, Support bot or Data analyst instead of a blank policy.
