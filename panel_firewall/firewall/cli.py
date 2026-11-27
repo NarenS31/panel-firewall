@@ -149,6 +149,22 @@ def cmd_report(a):
     return 0
 
 
+def cmd_exploits(a):
+    """What exploit patterns this machine has seen (anonymized signatures stored by `telemetry: true`)."""
+    from panel_firewall.firewall import telemetry
+    sigs = telemetry.ExploitLog(_ledger(a)).since(_since(a))
+    if a.json:
+        print(json.dumps([s.to_dict() for s in sigs], indent=2))
+    else:
+        print(telemetry.format_summary(telemetry.summarize(sigs), a.since or ""))
+    return 0
+
+
+def cmd_threats(a):
+    print("Threat feed requires Panel Cloud. Run with --cloud-url to connect.")
+    return 0
+
+
 def cmd_export_log(a):
     from panel_firewall.firewall.policy import load_policy
     from panel_firewall.firewall.summary import export_log
@@ -283,6 +299,10 @@ def main(argv=None) -> int:
     p.set_defaults(fn=cmd_export)
     p = sub.add_parser("report", help="shadow mode: what would have been blocked or held, by rule")
     common(p); p.add_argument("--since", default="48h"); p.add_argument("--json", action="store_true"); p.set_defaults(fn=cmd_report)
+    p = sub.add_parser("exploits", help="anonymized exploit patterns seen on this machine (needs `telemetry: true` in the policy to record them)")
+    common(p); p.add_argument("--since", default="24h"); p.add_argument("--json", action="store_true"); p.set_defaults(fn=cmd_exploits)
+    p = sub.add_parser("threats", help="the aggregated threat feed from Panel Cloud (placeholder)")
+    cloud_flags(p); p.set_defaults(fn=cmd_threats)
     p = sub.add_parser("export-log", help="PII-scrubbed event summaries (JSONL). No raw arguments unless --include-raw-args")
     common(p); p.add_argument("--out", required=True); p.add_argument("--since"); p.add_argument("--include-raw-args", action="store_true")
     p.set_defaults(fn=cmd_export_log)

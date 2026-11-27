@@ -212,20 +212,25 @@ class Ledger:
                             "reasons": ev["data"].get("reasons", []), "action_sha": ev["data"]["action_sha"]})
         return sorted(out, key=lambda p: p["ts"])
 
-    def executed_for(self, tool: str, since_ts: float) -> list[tuple[float, float | None]]:
-        rows = self._rows("""SELECT ts, json_extract(data,'$.amount') FROM events WHERE event='executed' AND tool=? AND ts>?
-                             ORDER BY seq""", (tool, since_ts))
-        return [(r[0], r[1]) for r in rows]
+    def executed_for(self, tool: str, since_ts: float, conversation_id: str | None = None) -> list[tuple[float, float | None]]:
+        """(ts, amount) of EXECUTED actions of `tool`. Across the whole ledger (every session) unless `conversation_id` is given."""
+        q, a = "SELECT ts, json_extract(data,'$.amount') FROM events WHERE event='executed' AND tool=? AND ts>?", [tool, since_ts]
+        if conversation_id is not None:
+            q, a = q + " AND conversation_id=?", a + [conversation_id]
+        return [(r[0], r[1]) for r in self._rows(q + " ORDER BY seq", a)]
 
-    def executed_with_field(self, tool: str, field: str, value, since_ts: float) -> list[float]:
-        """Timestamps of EXECUTED actions of `tool` whose request carried args[field] == value (shadow executions count: they really ran)."""
+    def executed_with_field(self, tool: str, field: str, value, since_ts: float, conversation_id: str | None = None) -> list[float]:
+        """Timestamps of EXECUTED actions of `tool` whose request carried args[field] == value (shadow executions count: they really ran).
+        Across every session unless `conversation_id` is given."""
         if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", field):
             return []
         v = value if isinstance(value, (int, float, str)) and not isinstance(value, bool) else json.dumps(value)
-        rows = self._rows("""SELECT e.ts FROM events e JOIN events r ON r.idem_key = e.idem_key AND r.event = 'requested'
-                             WHERE e.event = 'executed' AND e.tool = ? AND e.ts > ? AND json_extract(r.data, ?) = ? ORDER BY e.seq""",
-                          (tool, since_ts, f'$.args."{field}"', v))
-        return [r[0] for r in rows]
+        q = """SELECT e.ts FROM events e JOIN events r ON r.idem_key = e.idem_key AND r.event = 'requested'
+               WHERE e.event = 'executed' AND e.tool = ? AND e.ts > ? AND json_extract(r.data, ?) = ?"""
+        a = [tool, since_ts, f'$.args."{field}"', v]
+        if conversation_id is not None:
+            q, a = q + " AND e.conversation_id = ?", a + [conversation_id]
+        return [r[0] for r in self._rows(q + " ORDER BY e.seq", a)]
 
     # ------------------------------------------------------------------ circuit breaker
     BREAKER_KEY = "circuit-breaker"

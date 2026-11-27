@@ -133,6 +133,7 @@ class CloudClient:
     def policy(self) -> dict: return self._req("GET", "/v1/policy")
     def ping(self) -> dict: return self._req("GET", "/v1/ping")
     def events(self, events: list[dict]) -> dict: return self._req("POST", "/v1/events", json={"events": events})
+    def telemetry_exploits(self, signatures: list[dict]) -> dict: return self._req("POST", "/v1/telemetry/exploits", json={"signatures": signatures})
     def freeze(self) -> dict: return self._req("GET", "/v1/proxy/freeze")
     def tools(self, tools: list[dict]) -> dict: return self._req("POST", "/v1/proxy/tools", json={"tools": tools})
     def request_approval(self, body: dict) -> dict: return self._req("POST", "/v1/approvals", json=body)
@@ -309,6 +310,7 @@ class CloudSync:
         self.client, self.state, self.pm, self.fw, self.forced_shadow = client, state, pm, fw, forced_shadow
         self.policy_every, self.tick_every, self.clock, self.on_change = policy_every, tick_every, clock, on_change
         self._last_policy = 0.0
+        self._last_telemetry = 0.0
         self._registered: dict[str, float] = {}
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -383,6 +385,27 @@ class CloudSync:
         if recs:
             self._online()
         return sent
+
+    # -- anonymized exploit telemetry (opt-in: policy `telemetry: true`)
+    def upload_telemetry(self, batch: int = 200) -> int:
+        """Send not-yet-uploaded exploit signatures (the anonymized fields only) at most every UPLOAD_EVERY seconds. Returns how many were accepted."""
+        from panel_firewall.firewall import telemetry as tm
+        if not tm.enabled(self.fw.policy) or self.clock() - self._last_telemetry < tm.UPLOAD_EVERY:
+            return 0
+        self._last_telemetry = self.clock()
+        log_ = tm.ExploitLog(self.fw.ledger)
+        sent = 0
+        while True:
+            rows = log_.unuploaded(batch)
+            if not rows:
+                return sent
+            try:
+                self.client.telemetry_exploits([s.to_dict() for _i, s in rows])
+            except CloudError as e:      # includes a cloud without the endpoint yet: keep them and retry next interval
+                log.info("telemetry upload deferred (%s)", e)
+                return sent
+            log_.mark_uploaded([i for i, _s in rows], self.clock())
+            sent += len(rows)
 
     # -- approvals
     def register_pending(self) -> int:
@@ -499,6 +522,7 @@ class CloudSync:
             self._last_policy = self.clock()
             self.refresh_policy()
         self.upload_events()
+        self.upload_telemetry()
         self.register_pending()
         self.check_decisions(wait=0)
         self.check_unfreeze()

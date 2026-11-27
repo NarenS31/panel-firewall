@@ -16,8 +16,15 @@ Rule keys (all optional except where noted), per action name under `actions:`:
   protected: {field: [glob, ..]}   arg value matches a glob -> block (case-insensitive)
   consent_if: [{field, op, value}] op in eq, ne, gt, gte, lt, lte, in, contains, matches -> needs_consent
   block_if:   [{field, op, value}] same operators -> block
-  rate_limit: {max: n, per_seconds: s}        n executions already in the window -> block
-  max_total_amount: {amount: n, per_seconds: s}   executed total + this amount > n -> block
+  rate_limit: {max: n, per_seconds: s, cross_session: true}   n executions already in the window -> block
+  max_total_amount: {amount: n, per_seconds: s, cross_session: true}   executed total + this amount > n -> block
+                           Both count across EVERY session in the ledger by default; `cross_session: false` counts only the current conversation.
+  entity_velocity: {field, max_actions: n, per_seconds: s}   the same value of args[field] (e.g. customer_id) already in n EXECUTED calls
+                           of this tool in the window, in any session -> block. A missing field blocks.
+Top-level:
+  max_total_outflow: {amount: n, per_seconds: s, tools: [..]}   money out summed across the listed tools (each tool's own amount_field)
+                           in the window, any session; executed total + this amount > n -> block (catches refund+credit+withdraw splits)
+  telemetry: bool          opt in (default false) to anonymized exploit signatures (see telemetry.py)
   duplicate_guard: {field: str, within_seconds: s}   a second EXECUTED action of this tool with the same value in `field`
                            (for example order_id) inside the window -> needs_consent (a human may approve it). A missing field blocks.
   consent_sql_kinds: [..]  parsed SQL statement kinds (select, insert, update, delete) that always need a human, however few
@@ -53,9 +60,9 @@ SQL_KINDS = {"select", "insert", "update", "delete"}
 OPS = ("eq", "ne", "gt", "gte", "lt", "lte", "in", "contains", "matches")
 RULE_KEYS = {"allowed", "risk", "required_fields", "amount_field", "max_amount", "consent_over_amount", "max_rows",
              "consent_over_rows", "protected", "consent_if", "block_if", "rate_limit", "max_total_amount", "sql",
-             "path_args", "allowed_roots", "sql_arg", "note", "duplicate_guard", "consent_sql_kinds"}
+             "path_args", "allowed_roots", "sql_arg", "note", "duplicate_guard", "consent_sql_kinds", "entity_velocity"}
 TOP_KEYS = {"version", "name", "mode", "reviewed", "receipts", "actions", "sql", "consent_wait_seconds", "database",
-            "session", "ledger", "connectors", "enforce_mode", "circuit_breaker"}
+            "session", "ledger", "connectors", "enforce_mode", "circuit_breaker", "max_total_outflow", "telemetry"}
 
 
 @dataclass
@@ -121,11 +128,26 @@ def parse_policy(raw: dict, sha: str = "") -> Policy:
         for k in ("rate_limit", "max_total_amount"):
             if k in rule and not (isinstance(rule[k], dict) and rule[k].get("per_seconds", 0) > 0):
                 raise FirewallError(f"policy: actions.{name}.{k} needs a positive per_seconds")
+            if k in rule and not isinstance(rule[k].get("cross_session", True), bool):
+                raise FirewallError(f"policy: actions.{name}.{k}.cross_session must be true or false")
+        ev = rule.get("entity_velocity")
+        if ev is not None and not (isinstance(ev, dict) and set(ev) <= {"field", "max_actions", "per_seconds"} and isinstance(ev.get("field"), str)
+                                   and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", ev["field"])
+                                   and all(isinstance(ev.get(x), (int, float)) and not isinstance(ev.get(x), bool) and ev[x] > 0 for x in ("max_actions", "per_seconds"))):
+            raise FirewallError(f"policy: actions.{name}.entity_velocity needs a field name, a positive max_actions and a positive per_seconds")
         dg = rule.get("duplicate_guard")
         if dg is not None and not (isinstance(dg, dict) and set(dg) <= {"field", "within_seconds"} and isinstance(dg.get("field"), str)
                                    and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", dg["field"])
                                    and isinstance(dg.get("within_seconds"), (int, float)) and not isinstance(dg["within_seconds"], bool) and dg["within_seconds"] > 0):
             raise FirewallError(f"policy: actions.{name}.duplicate_guard needs a field name and a positive within_seconds")
+    mo = raw.get("max_total_outflow")
+    if mo is not None:
+        if not (isinstance(mo, dict) and set(mo) <= {"amount", "per_seconds", "tools"}
+                and all(isinstance(mo.get(x), (int, float)) and not isinstance(mo.get(x), bool) and math.isfinite(mo[x]) and mo[x] > 0 for x in ("amount", "per_seconds"))
+                and isinstance(mo.get("tools"), list) and mo["tools"] and all(isinstance(t, str) and t for t in mo["tools"])):
+            raise FirewallError("policy: max_total_outflow needs a positive amount, a positive per_seconds and a non-empty list of tools")
+    if "telemetry" in raw and not isinstance(raw["telemetry"], bool):
+        raise FirewallError("policy: telemetry must be true or false")
     cb = raw.get("circuit_breaker")
     if cb is not None:
         if not isinstance(cb, dict) or set(cb) - {"blocks", "per_seconds", "enabled"}:
@@ -139,13 +161,19 @@ def parse_policy(raw: dict, sha: str = "") -> Policy:
 @dataclass
 class LedgerState:
     """Snapshot of executed actions for one tool: [(timestamp, amount_or_None)]. Built by the caller from the ledger."""
-    executed: list = field(default_factory=list)
+    executed: list = field(default_factory=list)        # across every session (the ledger default)
+    executed_conv: list = field(default_factory=list)   # same, this conversation only (used by rules with cross_session: false)
+    entity: list = field(default_factory=list)          # timestamps of executed actions of this tool with the same entity_velocity value, any session
     same_field: list = field(default_factory=list)      # timestamps of executed actions of this tool with the same duplicate_guard value
 
 
 def window_needed(rule: dict) -> float:
     return max(float((rule.get("duplicate_guard") or {}).get("within_seconds", 0)), float((rule.get("rate_limit") or {}).get("per_seconds", 0)),
                float((rule.get("max_total_amount") or {}).get("per_seconds", 0)))
+
+
+def _window(st: LedgerState, rule_part: dict) -> list:
+    return st.executed if rule_part.get("cross_session", True) else st.executed_conv
 
 
 def _number(v):
@@ -248,12 +276,21 @@ def evaluate(action: Action, rule: dict | None, facts: dict, state: LedgerState,
                            f"(within {dg['within_seconds'] / 86400:g} days); a human must approve a second one")
     rl = rule.get("rate_limit")
     if rl:
-        n = sum(1 for ts, _ in state.executed if ts > now - rl["per_seconds"])
+        n = sum(1 for ts, _ in _window(state, rl) if ts > now - rl["per_seconds"])
         if n >= rl["max"]:
             blocks.append(f"rate limit: {n} already executed in the last {rl['per_seconds']:g}s (max {rl['max']})")
+    ev = rule.get("entity_velocity")
+    if ev:
+        if args.get(ev["field"]) in (None, ""):
+            blocks.append(f"entity velocity: missing '{ev['field']}', which the velocity rule needs")
+        else:
+            n = sum(1 for ts in state.entity if ts > now - ev["per_seconds"])
+            if n >= ev["max_actions"]:
+                blocks.append(f"entity velocity: {ev['field']} already in {n} executed {action.tool} calls in the last {ev['per_seconds']:g}s "
+                              f"(max {ev['max_actions']:g}), across all sessions")
     mt = rule.get("max_total_amount")
     if mt and amount is not None:
-        total = sum(a or 0 for ts, a in state.executed if ts > now - mt["per_seconds"])
+        total = sum(a or 0 for ts, a in _window(state, mt) if ts > now - mt["per_seconds"])
         if total + amount > mt["amount"]:
             blocks.append(f"cumulative {total + amount:g} in {mt['per_seconds']:g}s would exceed {mt['amount']:g}")
     blocks += facts.get("block_reasons", [])

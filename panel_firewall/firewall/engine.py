@@ -10,6 +10,7 @@ import logging
 import time
 from dataclasses import dataclass
 
+from panel_firewall.firewall import telemetry
 from panel_firewall.firewall.connector import Connector
 from panel_firewall.firewall.ledger import Ledger, approval_id
 from panel_firewall.firewall.policy import LedgerState, Policy, window_needed
@@ -73,10 +74,34 @@ class Firewall:
         rule = self.policy.rule_for(tool) or {}
         w = window_needed(rule)
         st = LedgerState(self.ledger.executed_for(tool, now - w) if w else [])
+        conv = action.conversation_id if action is not None else None
+        if w and conv is not None and any((rule.get(k) or {}).get("cross_session", True) is False for k in ("rate_limit", "max_total_amount")):
+            st.executed_conv = self.ledger.executed_for(tool, now - w, conv)
+        ev = rule.get("entity_velocity")
+        if ev and action is not None and isinstance(action.args, dict) and action.args.get(ev["field"]) not in (None, ""):
+            st.entity = self.ledger.executed_with_field(tool, ev["field"], action.args[ev["field"]], now - float(ev["per_seconds"]))
         dg = rule.get("duplicate_guard")
         if dg and action is not None and isinstance(action.args, dict) and action.args.get(dg["field"]) not in (None, ""):
             st.same_field = self.ledger.executed_with_field(tool, dg["field"], action.args[dg["field"]], now - float(dg["within_seconds"]))
         return st
+
+    # -------------------------------------------------------------- cross-tool outflow
+    def _outflow_reasons(self, action: Action, now: float) -> list[str]:
+        """`max_total_outflow`: money out summed across the listed tools, every session. Returns block reasons (empty = fine or not applicable)."""
+        mo = self.policy.raw.get("max_total_outflow")
+        if not mo or action.tool not in mo["tools"]:
+            return []
+        if self._risk(action.tool, self.connector_for(action.tool)) == "read":
+            return []
+        amt = self._amount(action)
+        if amt is None or amt < 0 or amt != amt or amt == float("inf"):
+            return [f"total outflow: '{(self.policy.rule_for(action.tool) or {}).get('amount_field', 'amount')}' is missing or not a finite "
+                    f"non-negative number, so it cannot be counted against the outflow cap"]
+        since = now - float(mo["per_seconds"])
+        total = sum(a or 0 for t in mo["tools"] for _ts, a in self.ledger.executed_for(t, since))
+        if total + amt > mo["amount"]:
+            return [f"total outflow: {total + amt:g} across {', '.join(mo['tools'])} in {mo['per_seconds']:g}s would exceed {mo['amount']:g}"]
+        return []
 
     # -------------------------------------------------------------- circuit breaker
     def _breaker(self) -> dict | None:
@@ -99,6 +124,7 @@ class Firewall:
         reason = f"circuit breaker tripped: {n} blocked actions in {cb['per_seconds']:g}s (limit {cb['blocks']}); every tool that is not a read is frozen"
         if self.ledger.freeze(reason, n, cb["per_seconds"]):
             log.error("[circuit breaker] %s. A human must run `usepanel unfreeze`.", reason)
+            telemetry.record_breaker_trip(self.policy, self.ledger, now)
             self._breaker_receipt("frozen", reason, n, cb["per_seconds"], None)
 
     def _breaker_receipt(self, outcome: str, reason: str, n: int, per: float, who: str | None) -> dict | None:
@@ -135,6 +161,8 @@ class Firewall:
             log.error("ledger unavailable while recording a block")
         rec = self._receipt(action, key, v, "blocked", None) if _signable(action) else None
         if trip:
+            if self.mode != "shadow":     # a human's denial or a freeze already in force is not new evidence of an exploit
+                telemetry.record_verdict(self.policy, self.ledger, action, reasons, "block", self.clock())
             try:
                 self._maybe_trip(self.clock())
             except Exception:
@@ -204,7 +232,10 @@ class Firewall:
         try:
             if self._breaker() and self._risk(action.tool, conn) != "read" and led.freeze_state() is not None:
                 return self._blocked(action, key, ["circuit breaker: writes are frozen after repeated blocked actions until a human unfreezes (usepanel unfreeze)"], trip=False)
+            out_reasons = self._outflow_reasons(action, now)    # before the per-tool rules; folded into the verdict so shadow mode records it too
             v = conn.validate(action, self.policy, self._state(action.tool, now, action), now)
+            if out_reasons:
+                v = Verdict(BLOCK, out_reasons + (v.reasons if v.decision == BLOCK else []))
         except Exception as e:
             return self._blocked(action, key, [f"validation failed ({type(e).__name__}: {e}); blocked for safety"])
         led.append(key, action.conversation_id, action.tool, "requested",
@@ -230,6 +261,7 @@ class Firewall:
                 if led.consent_state(key) != "pending":
                     led.append(key, action.conversation_id, action.tool, "pending",
                                {"approval_id": aid, "action_sha": sha, "args": action.args, "reasons": v.reasons})
+                    telemetry.record_verdict(self.policy, self.ledger, action, v.reasons, "needs_consent", self.clock())
                 ap = self._wait_for_approval(key, sha)
                 if ap is None:
                     if led.consent_state(key) == "denied":

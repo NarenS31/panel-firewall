@@ -143,6 +143,16 @@ TERMINAL = ("executed", "blocked", "pending", "failed", "denied", "unknown_outco
 
 
 def check_reply(reply: str, ledger: Ledger, conversation_id: str, policy=None, mode: str = "regex") -> ClaimCheck:
+    """Check a reply for unbacked completion claims (see `_check_reply`). With `telemetry: true` in the policy, an unbacked claim also
+    leaves an anonymized `false_completion` signature in the local exploit log."""
+    res = _check_reply(reply, ledger, conversation_id, policy, mode)
+    if not res.ok:
+        from panel_firewall.firewall import telemetry
+        telemetry.record_false_completion(policy, ledger, conversation_id, res.claims)
+    return res
+
+
+def _check_reply(reply: str, ledger: Ledger, conversation_id: str, policy=None, mode: str = "regex") -> ClaimCheck:
     """mode "regex": the Phase 6 blocker (unchanged, the default; the frozen Phase 7 harness uses it).
     mode "receipts": every sentence that asserts an action happened must cite a receipt id (`rcpt_...`) that the ledger confirms
     for THIS conversation, with a matching family and amount; otherwise the whole reply is replaced by a ledger-derived summary."""

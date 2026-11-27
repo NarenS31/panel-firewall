@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.4.0
+- **Cross-session tracking:** `rate_limit` and `max_total_amount` count across every session by default; `cross_session: false` scopes a rule to one conversation.
+- **`entity_velocity`:** block when the same value of a field (e.g. `customer_id`) is in too many executed calls to a tool within a window, in any session.
+- **`max_total_outflow`:** top-level cap on money out summed across several tools (refund + credit + withdraw) in a window.
+- **Opt-in anonymized exploit telemetry** (`telemetry: true`, off by default): local `exploit_signatures` table, `usepanel exploits --since 24h`, batched upload to `POST /v1/telemetry/exploits` every 5 minutes when Panel Cloud is configured. `usepanel threats` is a placeholder for the cloud threat feed.
+- `usepanel audit` and `usepanel demo` (see below), plus the fixes listed here.
 - Claim blocker (receipts mode): detects "dealt with", "pushed it through", "went ahead and", "wrapped up"; "ran into/across/out" is no longer read as an action; "recorded as/under <id>" counts as citation wording; a closing quote ends the sentence.
 - Shadow to enforce: a call that ran in shadow mode is re-checked against the policy when sent again after enforcement is on (blocked if enforcement would not allow it; never run twice).
 - `usepanel proxy` warns when an allowed upstream tool looks like shell or file-write access (it can bypass Panel).

@@ -27,6 +27,8 @@ _RULES = [
     (r"^needs approval: |asking a human", "consent_if"),
     (r"^rate limit", "rate_limit"),
     (r"^cumulative ", "max_total_amount"),
+    (r"^entity velocity", "entity_velocity"),
+    (r"^total outflow", "max_total_outflow"),
     (r"^approval mode", "approval_mode"),
     (r"outside the allowed folders|absolute path string", "allowed_roots"),
     (r"matches protected pattern", "protected"),
