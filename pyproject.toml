@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "panel-firewall"
-version = "0.2.0"
+version = "0.3.0"
 description = "Panel checks what an AI agent says and what it does: an action firewall (MCP proxy, deterministic policy, consent, idempotency, signed receipts) and a support-bot guard."
 readme = "README.md"
 requires-python = ">=3.11"

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.0
+- **Browser sign-in**: `usepanel init --cloud` opens Panel Cloud in your browser, you press Authorize, and the workspace API key is saved for you. No more copying keys.
+- **Policy templates** in Panel Cloud: start from E-commerce agent, Support bot or Data analyst instead of a blank policy.
+- **Email approval links**: when an action is held, Panel Cloud emails Approve / Deny links (valid for 1 hour, no raw SQL in the message).
+
 ## 0.2.0
 - **`consent_sql_kinds`** (per-tool, opt-in): statement kinds such as `[delete]` always need a human, even for one row, so a filtered delete is held in Approvals instead of running when it is under `consent_over_rows`. `usepanel init` now writes `consent_sql_kinds: [delete]` for SQL tools. Policies without the key behave exactly as before.
 - **One-command Panel Cloud setup**: `usepanel init --token pit_... [--cloud-url URL]` (the command the dashboard shows) trades a single-use, 10-minute setup token for a workspace API key and saves it to `~/.config/usepanel/cloud.json` (honours `XDG_CONFIG_HOME`; `PANEL_CONFIG_DIR` overrides; file mode 600, directory 700, written atomically). The key is never printed. `--cloud-url` defaults to `https://app.usepanel.dev`; plain `http://` is refused except for localhost / 127.0.0.1.
